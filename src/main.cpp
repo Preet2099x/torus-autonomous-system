@@ -1,6 +1,7 @@
 #include <var.h>
 #include <maf.h>
 #include <string.h>
+#include <stdlib.h>
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <structure.h>
@@ -164,6 +165,13 @@ void loop() {
 
   kire.onReceive(receiveEvent);
 
+  // Ignore heading packets like H:120.8 so embedded digits are not treated as drive commands.
+  static bool sawHeadingPrefix = false;
+  static bool parsingHeadingPacket = false;
+  static char headingPacket[20];
+  static int headingPacketIndex = 0;
+  static float latestSerialHeading = 0.0f;
+
   //Handle Fliter
   static SMA<20, double, double> filter_L;
   double rpm_L = 0;
@@ -187,34 +195,73 @@ void loop() {
   //Handle Serial Commands
   if(Serial.available()) {
     if(systemCounter == false) {
-      int _data = Serial.read();
-      if(_data == char('m')) {
-        Serial.print(getTeensySerial());
-         Serial.print(" | ");
-         Serial.println("Motion Module");
-         data = char('0');
-      } else if(_data == char('s')) {
-        systemCounter = true;
-        printAlter = false; //TODO: Can be Removed for fast testing
-        data = '0';//TODO: Can be Removed for fast testing
-        printSetting();
-      } else if(_data == char('p')) {
-        printAlter =  !printAlter;
-      } else if(_data == char('a')) {
-        if (data != '3' || data != '4' || data != '0') {
-            rpmAlter = !rpmAlter; 
-      } } else if(_data == char('b')) {
-        if (data != '1' || data != '2' || data != '0') {
-            rpmAlter_T = !rpmAlter_T; 
-      } } else if(_data != 10) {
-        data = _data;
-        if(_data == data && elaspedTimeControlCounter < timeConstantControlCounter) {
-          startTimeControlCounter = currentTimeControlCounter;
-        } else {
-          data = _data;
-          startTimeControlCounter = currentTimeControlCounter;
+      while (Serial.available()) {
+        int _data = Serial.read();
+
+        if (parsingHeadingPacket) {
+          bool isHeadingNumberChar = (_data >= '0' && _data <= '9') || _data == '.' || _data == '-' || _data == '+';
+
+          if (_data == '\n' || _data == '\r' || !isHeadingNumberChar) {
+            if (headingPacketIndex > 0) {
+              headingPacket[headingPacketIndex] = '\0';
+              latestSerialHeading = atof(headingPacket);
+            }
+            headingPacketIndex = 0;
+            parsingHeadingPacket = false;
+            continue;
+          }
+
+          if (isHeadingNumberChar) {
+            if (headingPacketIndex < (int)sizeof(headingPacket) - 1) {
+              headingPacket[headingPacketIndex++] = (char)_data;
+            }
+            continue;
+          }
         }
-      }  
+
+        if (sawHeadingPrefix) {
+          if (_data == ':') {
+            parsingHeadingPacket = true;
+            headingPacketIndex = 0;
+            sawHeadingPrefix = false;
+            continue;
+          }
+          sawHeadingPrefix = false;
+        }
+
+        if (_data == 'H' || _data == 'h') {
+          sawHeadingPrefix = true;
+          continue;
+        }
+
+        if(_data == char('m')) {
+          Serial.print(getTeensySerial());
+          Serial.print(" | ");
+          Serial.println("Motion Module");
+          data = char('0');
+        } else if(_data == char('s')) {
+          systemCounter = true;
+          printAlter = false; //TODO: Can be Removed for fast testing
+          data = '0';//TODO: Can be Removed for fast testing
+          printSetting();
+        } else if(_data == char('p')) {
+          printAlter =  !printAlter;
+        } else if(_data == char('a')) {
+          if (data != '3' || data != '4' || data != '0') {
+              rpmAlter = !rpmAlter; 
+        } } else if(_data == char('b')) {
+          if (data != '1' || data != '2' || data != '0') {
+              rpmAlter_T = !rpmAlter_T; 
+        } } else if(_data != 10) {
+          data = _data;
+          if(_data == data && elaspedTimeControlCounter < timeConstantControlCounter) {
+            startTimeControlCounter = currentTimeControlCounter;
+          } else {
+            data = _data;
+            startTimeControlCounter = currentTimeControlCounter;
+          }
+        }
+      }
     } else {
       String _data = Serial.readString();
       _data = _data.remove(_data.length()-1, 1);
@@ -272,6 +319,9 @@ void loop() {
       Serial.print(avgRPM_L);
       Serial.print(" | ");
       Serial.print(avgRPM_R);
+      Serial.print(" | ");
+      Serial.print("H:");
+      Serial.print(latestSerialHeading, 1);
       Serial.print(" | ");
       Serial.print(1.0/16*imu.eul_heading);
       Serial.print(" | ");
