@@ -88,6 +88,13 @@ int rpmAlter_T = 0;
 int rpmAlter = 0;
 int _dirData = 0;
 
+float control_left_rpm = 0;
+float control_right_rpm = 0;
+float control_heading = 0;
+
+float target_heading = 0;
+bool heading_initialized = false;
+
 //Time Variable
 float timeConstant = 100; //MilliSecond 100 | 10 ONLY -> Function-> handletime
 float startTime, elaspedTime = 0, currentTime;
@@ -305,6 +312,10 @@ void loop() {
     
     avgRPM_L = filter_L(rpm_L);
     avgRPM_R = filter_R(rpm_R);
+
+    control_left_rpm = avgRPM_L;
+    control_right_rpm = avgRPM_R;
+    control_heading = latestSerialHeading;
 
 
     if(printAlter == true) {  
