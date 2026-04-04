@@ -4,17 +4,31 @@
 extern float latestSerialHeading;   // heading coming from main.cpp
 
 static float targetHeading = 0;
-// static bool headingInitialized = false;
+
 static char lastCommand = '0';
 
-const float Kp = 0.8;   // heading correction strength
+// PID gains
+const float Kp = 0.8;
+const float Ki = 0.02; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
+const float Kd = 0.4;
+
+// PID state
+static float integral = 0;
+static float prevError = 0;
+
+// control timestep (seconds)
+const float dt = 0.1;
+
 void motion(char _data) {
-  if(_data == '0') { //TODO Implemtation
+  if(_data == '0') { 
     rpmAlter = false;
     rpmAlter_T = false;
-    // headingInitialized = false;
     //Serial5.write(0);
     //Serial5.write(128);
+
+    integral = 0;
+    prevError = 0;
+
     digitalWrite(dirPin_L, LOW);
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, 0);
@@ -38,7 +52,22 @@ else if (_data == '1') {
     if(abs(error) < 1.0) error = 0;
 
 
-    float correction = Kp * error;
+    // ---- PID ----
+    integral += error * dt;
+
+    // Anti-windup protection
+    integral = constrain(integral, -50, 50);
+
+    float derivative = (error - prevError) / dt;
+
+    float correction =
+          Kp * error
+        + Ki * integral
+        + Kd * derivative;
+
+    prevError = error;
+
+    // limit steering strength
     correction = constrain(correction, -20, 20);
 
     int baseRight = 246;
