@@ -19,6 +19,11 @@ uint8_t NDOF       =     0x0C;
 
 imuData imu;
 
+extern float debug_error;
+extern float debug_targetHeading;
+extern float debug_serialHeading;
+extern float debug_correction;
+
 int FLW = 0;
 int FRW = 0;
 int BLW = 0;
@@ -308,14 +313,15 @@ void loop() {
 
 
     if(printAlter == true) {  
+      // leftRPM | rightRPM | heading | target | error | correction
       Serial.print(data);
       Serial.print(" | ");
       //Serial.print(rpmAlter);
       //Serial.print(" | ");
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
-      Serial.print(emergency);
-      Serial.print(" | ");
+      // Serial.print(emergency);
+      // Serial.print(" | ");
       Serial.print(avgRPM_L);
       Serial.print(" | ");
       Serial.print(avgRPM_R);
@@ -323,13 +329,14 @@ void loop() {
       Serial.print("H:");
       Serial.print(latestSerialHeading, 1);
       Serial.print(" | ");
-      Serial.print(1.0/16*imu.eul_heading);
+      Serial.print(" | T:");
+      Serial.print(debug_targetHeading, 1);
       Serial.print(" | ");
-      Serial.print(1.0/16*imu.eul_roll);
+      Serial.print(" | E:");
+      Serial.print(debug_error, 2);
       Serial.print(" | ");
-      Serial.print(1.0/16*imu.eul_pitch);
-      Serial.print(" | ");
-      Serial.println(imu.temp);
+      Serial.print(" | C:");
+      Serial.print(debug_correction, 2);
       /*Serial.print(" | ");
       Serial.print((s.calib_stat >> 6) & 3);
       Serial.print(" | ");
