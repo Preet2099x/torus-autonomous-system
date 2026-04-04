@@ -1,28 +1,59 @@
 #include <var.h>
 #include <Arduino.h>
 
+extern float latestSerialHeading;   // heading coming from main.cpp
+
+static float targetHeading = 0;
+// static bool headingInitialized = false;
+static char lastCommand = '0';
+
+const float Kp = 0.8;   // heading correction strength
 void motion(char _data) {
   if(_data == '0') { //TODO Implemtation
     rpmAlter = false;
     rpmAlter_T = false;
+    // headingInitialized = false;
     //Serial5.write(0);
     //Serial5.write(128);
     digitalWrite(dirPin_L, LOW);
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, 0);
     analogWrite(pwmPin_R, 0);
-  }  else if (_data == '1') {
+  }  
+else if (_data == '1') {
     rpmAlter_T = false;
-    //Serial5.write(rpmAlter == 0 ? 61: 63);    //Value RIGHT: 0(Stop) - 63(MAX) CW
-    //Serial5.write(rpmAlter == 0 ? 191 : 191); //Value LEFT: 128(Stop) - 191(MAX) CW
-    //-------------------------
+
     digitalWrite(dirPin_R, LOW);
     digitalWrite(dirPin_L, LOW);
-    // analogWrite(pwmPin_R, rpmAlter == 0 ? 215: 250);
-    // analogWrite(pwmPin_L, rpmAlter == 0 ? 205: 240);
-    analogWrite(pwmPin_R, 246);
-    analogWrite(pwmPin_L, 250);
-  } else if(_data == '2') {
+
+    if(_data == '1' && lastCommand != '1') {
+        targetHeading = latestSerialHeading;
+    }
+
+    float error = targetHeading - latestSerialHeading;
+
+    if(error > 180) error -= 360;
+    if(error < -180) error += 360;
+
+    if(abs(error) < 1.0) error = 0;
+
+
+    float correction = Kp * error;
+    correction = constrain(correction, -20, 20);
+
+    int baseRight = 246;
+    int baseLeft  = 250;
+
+    int pwmR = baseRight + correction;
+    int pwmL = baseLeft  - correction;
+
+    pwmR = constrain(pwmR, 0, 255);
+    pwmL = constrain(pwmL, 0, 255);
+
+    analogWrite(pwmPin_R, pwmR);
+    analogWrite(pwmPin_L, pwmL);
+}
+  else if(_data == '2') {
     rpmAlter_T = false;
     //Serial5.write(rpmAlter == 0 ? BRW : BRD); //Value RIGHT: 64(Stop) - 127(MAX) CCW
     //Serial5.write(rpmAlter == 0 ? BLW: BLD);  //Value LEFT: 192(Stop) - 255(MAX) CCW
@@ -82,5 +113,6 @@ void motion(char _data) {
     analogWrite(pwmPin_L, 150);
     analogWrite(pwmPin_R, rpmAlter == 0 ? 202 :245);
   } else {} 
+  lastCommand = _data;
 }
 

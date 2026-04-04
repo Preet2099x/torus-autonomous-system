@@ -95,6 +95,7 @@ float startTime, elaspedTime = 0, currentTime;
 // Goal: left ~76.5, right ~75.8
 float rpmScale_L = 1.93534;
 float rpmScale_R = 1.94640;
+float latestSerialHeading = 0.0f;
 
 //Time Setup Control Counter
 float timeConstantControlCounter = 1000; //Chnage This As per Trail 
@@ -170,7 +171,6 @@ void loop() {
   static bool parsingHeadingPacket = false;
   static char headingPacket[20];
   static int headingPacketIndex = 0;
-  static float latestSerialHeading = 0.0f;
 
   //Handle Fliter
   static SMA<20, double, double> filter_L;
