@@ -7,6 +7,7 @@ static float targetHeading = 0;
 
 static char lastCommand = '0';
 
+
 // PID gains
 const float Kp = 0.8;
 const float Ki = 0.02; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
@@ -18,6 +19,12 @@ static float prevError = 0;
 
 // control timestep (seconds)
 const float dt = 0.1;
+
+// Debug variables
+float debug_error = 0;
+float debug_targetHeading = 0;
+float debug_serialHeading = 0;
+float debug_correction = 0;
 
 void motion(char _data) {
   if(_data == '0') { 
@@ -70,6 +77,12 @@ else if (_data == '1') {
     // limit steering strength
     correction = constrain(correction, -20, 20);
 
+    // store debug values
+    debug_error = error;
+    debug_targetHeading = targetHeading;
+    debug_serialHeading = latestSerialHeading;
+    debug_correction = correction;
+
     int baseRight = 246;
     int baseLeft  = 250;
 
@@ -82,18 +95,60 @@ else if (_data == '1') {
     analogWrite(pwmPin_R, pwmR);
     analogWrite(pwmPin_L, pwmL);
 }
-  else if(_data == '2') {
-    rpmAlter_T = false;
-    //Serial5.write(rpmAlter == 0 ? BRW : BRD); //Value RIGHT: 64(Stop) - 127(MAX) CCW
-    //Serial5.write(rpmAlter == 0 ? BLW: BLD);  //Value LEFT: 192(Stop) - 255(MAX) CCW
-    
-    digitalWrite(dirPin_R, HIGH);
-    digitalWrite(dirPin_L, HIGH);
-    // analogWrite(pwmPin_R, rpmAlter == 0 ? 202 : 240);
-    // analogWrite(pwmPin_L, rpmAlter == 0 ? 211 : 249); 
-    analogWrite(pwmPin_R, 250);
-    analogWrite(pwmPin_L, 242);
-  } else if (_data == '3') {
+  else if (_data == '2') {
+      rpmAlter_T = false;
+
+      digitalWrite(dirPin_R, HIGH);
+      digitalWrite(dirPin_L, HIGH);
+
+      if(_data == '2' && lastCommand != '2') {
+          targetHeading = latestSerialHeading;
+          integral = 0;
+          prevError = 0;
+      }
+
+      float error = targetHeading - latestSerialHeading;
+
+      if(error > 180) error -= 360;
+      if(error < -180) error += 360;
+
+      if(abs(error) < 1.0) error = 0;
+
+      // ---- PID ----
+      integral += error * dt;
+      integral = constrain(integral, -50, 50);
+
+      float derivative = (error - prevError) / dt;
+
+      float correction =
+            Kp * error
+          + Ki * integral
+          + Kd * derivative;
+
+      prevError = error;
+
+      correction = constrain(correction, -20, 20);
+
+      int baseRight = 250;
+      int baseLeft  = 242;
+
+      // reverse steering for backward motion
+      int pwmR = baseRight - correction;
+      int pwmL = baseLeft  + correction;
+
+      pwmR = constrain(pwmR, 0, 255);
+      pwmL = constrain(pwmL, 0, 255);
+
+      analogWrite(pwmPin_R, pwmR);
+      analogWrite(pwmPin_L, pwmL);
+
+      // store debug values
+      debug_error = error;
+      debug_targetHeading = targetHeading;
+      debug_serialHeading = latestSerialHeading;
+      debug_correction = correction;
+  }
+  else if (_data == '3') {
     rpmAlter = false;
     //Serial5.write(rpmAlter_T == 0 ?TRR:FRD);
     //Serial5.write(rpmAlter_T == 0 ?TRL:BLW);
