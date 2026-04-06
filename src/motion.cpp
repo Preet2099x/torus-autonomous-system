@@ -10,9 +10,9 @@ static char lastCommand = '0';
 
 
 // PID gains
-const float Kp = 2.2;
-const float Ki = 0.01; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
-const float Kd = 0.6;
+const float Kp = 0.2;
+const float Ki = 0.02; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
+const float Kd = 0.12;
 
 // PID state
 static float integral = 0;
@@ -56,11 +56,14 @@ else if (_data == '1') {
     }
 
     float error = targetHeading - latestSerialHeading;
+    
+    while (error > 180) error -= 360;
+    while (error < -180) error += 360;
 
-    if(error > 180) error -= 360;
-    if(error < -180) error += 360;
-
-    // if(fabs(error) < 1.0) error = 0;
+    const float headingDeadband = 0.05f;
+    if (fabsf(error) < headingDeadband) {
+      error = 0.0f;
+    }
 
 
     // ---- PID ----
@@ -87,11 +90,17 @@ else if (_data == '1') {
     debug_serialHeading = latestSerialHeading;
     debug_correction = correction;
 
+    const float minStepErrorThreshold = 0.35f;
+    if (fabsf(correction) < 1.0f && fabsf(error) >= minStepErrorThreshold) {
+      correction = (correction >= 0.0f) ? 1.0f : -1.0f;
+    }
+
     int baseRight = 237;
     int baseLeft  = 242;
 
-    int pwmR = baseRight + correction;
-    int pwmL = baseLeft  - correction;
+    int steeringStep = (int)roundf(correction);
+    int pwmR = baseRight - steeringStep;
+    int pwmL = baseLeft  + steeringStep;
 
     pwmR = constrain(pwmR, 0, 255);
     pwmL = constrain(pwmL, 0, 255);
@@ -110,14 +119,15 @@ else if (_data == '1') {
           integral = 0;
           prevError = 0;
       }
-
       float error = targetHeading - latestSerialHeading;
       
+      while (error > 180) error -= 360;
+      while (error < -180) error += 360;
 
-      if(error > 180) error -= 360;
-      if(error < -180) error += 360;
-
-      // if(fabs(error) < 1.0) error = 0;
+      const float headingDeadband = 0.05f;
+      if (fabsf(error) < headingDeadband) {
+        error = 0.0f;
+      }
 
       // ---- PID ----
       integral += error * dt;
@@ -134,12 +144,18 @@ else if (_data == '1') {
 
       correction = constrain(correction, -40, 40);
 
+      const float minStepErrorThreshold = 0.35f;
+      if (fabsf(correction) < 1.0f && fabsf(error) >= minStepErrorThreshold) {
+        correction = (correction >= 0.0f) ? 1.0f : -1.0f;
+      }
+
       int baseRight = 250;
       int baseLeft  = 242;
 
       // reverse steering for backward motion
-      int pwmR = baseRight - correction;
-      int pwmL = baseLeft  + correction;
+      int steeringStep = (int)roundf(correction);
+      int pwmR = baseRight - steeringStep;
+      int pwmL = baseLeft  + steeringStep;
 
       pwmR = constrain(pwmR, 0, 255);
       pwmL = constrain(pwmL, 0, 255);
