@@ -337,8 +337,6 @@ void loop() {
 
     if(printAlter == true) {  
       // leftRPM | rightRPM | heading | target | error | correction
-      Serial.print(data);
-      Serial.print(" | ");
       //Serial.print(rpmAlter);
       //Serial.print(" | ");
       //Serial.print(rpmAlter_T);

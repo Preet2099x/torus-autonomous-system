@@ -37,6 +37,11 @@ void motion(char _data) {
     integral = 0;
     prevError = 0;
 
+    debug_error = 0;
+    debug_correction = 0;
+    debug_targetHeading = latestSerialHeading;
+    debug_serialHeading = latestSerialHeading;
+
     digitalWrite(dirPin_L, LOW);
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, 0);
