@@ -154,8 +154,8 @@ else if (_data == '1') {
         correction = (correction >= 0.0f) ? 1.0f : -1.0f;
       }
 
-      int baseRight = 250;
-      int baseLeft  = 242;
+      int baseRight = 251;
+      int baseLeft  = 244;
 
       // reverse steering for backward motion
       int steeringStep = (int)roundf(correction);
