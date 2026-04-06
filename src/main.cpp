@@ -101,6 +101,8 @@ float startTime, elaspedTime = 0, currentTime;
 float rpmScale_L = 1.93534;
 float rpmScale_R = 1.94640;
 float latestSerialHeading = 0.0f;
+static float lastValidHeading = 0.0f;
+
 
 //Time Setup Control Counter
 float timeConstantControlCounter = 1000; //Chnage This As per Trail 
@@ -209,7 +211,22 @@ void loop() {
           if (_data == '\n' || _data == '\r' || !isHeadingNumberChar) {
             if (headingPacketIndex > 0) {
               headingPacket[headingPacketIndex] = '\0';
-              latestSerialHeading = atof(headingPacket);
+              float newHeading = atof(headingPacket);
+              // normalize
+              while (newHeading < 0) newHeading += 360;
+              while (newHeading >= 360) newHeading -= 360;
+
+              // reject impossible jumps
+              float diff = newHeading - lastValidHeading;
+              if (diff > 180) diff -= 360;
+              if (diff < -180) diff += 360;
+
+              // guard-rail filter
+              if (abs(diff) <= 10) {
+                  lastValidHeading = newHeading;
+              }
+
+              latestSerialHeading = lastValidHeading;
             }
             headingPacketIndex = 0;
             parsingHeadingPacket = false;
@@ -320,8 +337,8 @@ void loop() {
       //Serial.print(" | ");
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
-      // Serial.print(emergency);
-      // Serial.print(" | ");
+      Serial.print(emergency);
+      Serial.print(" | ");
       Serial.print(avgRPM_L);
       Serial.print(" | ");
       Serial.print(avgRPM_R);

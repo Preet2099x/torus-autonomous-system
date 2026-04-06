@@ -1,5 +1,6 @@
 #include <var.h>
 #include <Arduino.h>
+#include <math.h>
 
 extern float latestSerialHeading;   // heading coming from main.cpp
 
@@ -49,6 +50,8 @@ else if (_data == '1') {
 
     if(_data == '1' && lastCommand != '1') {
         targetHeading = latestSerialHeading;
+        integral = 0;
+        prevError = 0;
     }
 
     float error = targetHeading - latestSerialHeading;
@@ -56,7 +59,7 @@ else if (_data == '1') {
     if(error > 180) error -= 360;
     if(error < -180) error += 360;
 
-    if(abs(error) < 1.0) error = 0;
+    if(fabs(error) < 2.0) error = 0;
 
 
     // ---- PID ----
@@ -75,7 +78,7 @@ else if (_data == '1') {
     prevError = error;
 
     // limit steering strength
-    correction = constrain(correction, -20, 20);
+    correction = constrain(correction, -12, 12);
 
     // store debug values
     debug_error = error;
@@ -83,7 +86,7 @@ else if (_data == '1') {
     debug_serialHeading = latestSerialHeading;
     debug_correction = correction;
 
-    int baseRight = 246;
+    int baseRight = 244;
     int baseLeft  = 250;
 
     int pwmR = baseRight + correction;
@@ -108,11 +111,12 @@ else if (_data == '1') {
       }
 
       float error = targetHeading - latestSerialHeading;
+      
 
       if(error > 180) error -= 360;
       if(error < -180) error += 360;
 
-      if(abs(error) < 1.0) error = 0;
+      if(fabs(error) < 2.0) error = 0;
 
       // ---- PID ----
       integral += error * dt;
@@ -127,7 +131,7 @@ else if (_data == '1') {
 
       prevError = error;
 
-      correction = constrain(correction, -20, 20);
+      correction = constrain(correction, -12, 12);
 
       int baseRight = 250;
       int baseLeft  = 242;
@@ -152,6 +156,8 @@ else if (_data == '1') {
     rpmAlter = false;
     //Serial5.write(rpmAlter_T == 0 ?TRR:FRD);
     //Serial5.write(rpmAlter_T == 0 ?TRL:BLW);
+    integral = 0;
+    prevError = 0;
 
     digitalWrite(dirPin_L, LOW);
     digitalWrite(dirPin_R, HIGH);
@@ -161,6 +167,8 @@ else if (_data == '1') {
     rpmAlter = false;
     //Serial5.write(rpmAlter_T == 0 ?TLR:BRW);
     //Serial5.write(rpmAlter_T == 0 ?TLL:FLD);
+    integral = 0;
+    prevError = 0;
     digitalWrite(dirPin_L, HIGH);
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, rpmAlter_T == 0 ? 83 :150);
