@@ -26,7 +26,6 @@ double handletime(float data) {
     }
 }
 
-
 uint32_t getTeensySerial() {
 	uint32_t num;
 	num = HW_OCOTP_MAC0 & 0xFFFFFF;

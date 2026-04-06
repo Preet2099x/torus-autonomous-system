@@ -102,6 +102,7 @@ float rpmScale_L = 1.93534;
 float rpmScale_R = 1.94640;
 float latestSerialHeading = 0.0f;
 static float lastValidHeading = 0.0f;
+static bool hasValidHeading = false;
 
 
 //Time Setup Control Counter
@@ -216,14 +217,19 @@ void loop() {
               while (newHeading < 0) newHeading += 360;
               while (newHeading >= 360) newHeading -= 360;
 
-              // reject impossible jumps
-              float diff = newHeading - lastValidHeading;
-              if (diff > 180) diff -= 360;
-              if (diff < -180) diff += 360;
+              if (!hasValidHeading) {
+                lastValidHeading = newHeading;
+                hasValidHeading = true;
+              } else {
+                // reject impossible jumps while allowing normal heading changes
+                float diff = newHeading - lastValidHeading;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
 
-              // guard-rail filter
-              if (abs(diff) <= 10) {
+                // guard-rail filter (was too strict at 10 deg and froze updates)
+                if (fabsf(diff) <= 45.0f) {
                   lastValidHeading = newHeading;
+                }
               }
 
               latestSerialHeading = lastValidHeading;
@@ -337,23 +343,17 @@ void loop() {
       //Serial.print(" | ");
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
-      Serial.print(emergency);
-      Serial.print(" | ");
-      Serial.print(avgRPM_L);
-      Serial.print(" | ");
-      Serial.print(avgRPM_R);
-      Serial.print(" | ");
-      Serial.print("H:");
-      Serial.print(latestSerialHeading, 1);
-      Serial.print(" | ");
-      Serial.print(" | T:");
-      Serial.print(debug_targetHeading,1);
-      Serial.print(" | ");
-      Serial.print(" | E:");
-      Serial.print(debug_error,2);
-      Serial.print(" | ");
-      Serial.print(" | C:");
-      Serial.print(debug_correction,2);
+      Serial.printf(
+      "%c | %3d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f\n",
+      data,
+      emergency,
+      avgRPM_L,
+      avgRPM_R,
+      latestSerialHeading,
+      debug_targetHeading,
+      debug_error,
+      debug_correction
+      );
       /*Serial.print(" | ");
       Serial.print((s.calib_stat >> 6) & 3);
       Serial.print(" | ");

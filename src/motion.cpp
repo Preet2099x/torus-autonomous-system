@@ -10,9 +10,9 @@ static char lastCommand = '0';
 
 
 // PID gains
-const float Kp = 0.8;
-const float Ki = 0.02; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
-const float Kd = 0.4;
+const float Kp = 2.2;
+const float Ki = 0.01; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
+const float Kd = 0.6;
 
 // PID state
 static float integral = 0;
@@ -42,12 +42,13 @@ void motion(char _data) {
     analogWrite(pwmPin_L, 0);
     analogWrite(pwmPin_R, 0);
   }  
+  //Forward cmd
 else if (_data == '1') {
     rpmAlter_T = false;
 
     digitalWrite(dirPin_R, LOW);
     digitalWrite(dirPin_L, LOW);
-
+    
     if(_data == '1' && lastCommand != '1') {
         targetHeading = latestSerialHeading;
         integral = 0;
@@ -59,14 +60,14 @@ else if (_data == '1') {
     if(error > 180) error -= 360;
     if(error < -180) error += 360;
 
-    if(fabs(error) < 2.0) error = 0;
+    // if(fabs(error) < 1.0) error = 0;
 
 
     // ---- PID ----
     integral += error * dt;
 
     // Anti-windup protection
-    integral = constrain(integral, -50, 50);
+    integral = constrain(integral, -20, 20);
 
     float derivative = (error - prevError) / dt;
 
@@ -78,7 +79,7 @@ else if (_data == '1') {
     prevError = error;
 
     // limit steering strength
-    correction = constrain(correction, -12, 12);
+    correction = constrain(correction, -45, 45);
 
     // store debug values
     debug_error = error;
@@ -86,8 +87,8 @@ else if (_data == '1') {
     debug_serialHeading = latestSerialHeading;
     debug_correction = correction;
 
-    int baseRight = 244;
-    int baseLeft  = 250;
+    int baseRight = 237;
+    int baseLeft  = 242;
 
     int pwmR = baseRight + correction;
     int pwmL = baseLeft  - correction;
@@ -116,11 +117,11 @@ else if (_data == '1') {
       if(error > 180) error -= 360;
       if(error < -180) error += 360;
 
-      if(fabs(error) < 2.0) error = 0;
+      // if(fabs(error) < 1.0) error = 0;
 
       // ---- PID ----
       integral += error * dt;
-      integral = constrain(integral, -50, 50);
+      integral = constrain(integral, -20, 20);
 
       float derivative = (error - prevError) / dt;
 
@@ -131,7 +132,7 @@ else if (_data == '1') {
 
       prevError = error;
 
-      correction = constrain(correction, -12, 12);
+      correction = constrain(correction, -40, 40);
 
       int baseRight = 250;
       int baseLeft  = 242;
