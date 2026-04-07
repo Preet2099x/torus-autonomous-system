@@ -219,16 +219,15 @@ else if (_data == '1') {
 
       correction = constrain(correction, -40, 40);
 
-      const float minStepErrorThreshold = 0.35f;
-      if (fabsf(correction) < 1.0f && fabsf(error) >= minStepErrorThreshold) {
-        correction = (correction >= 0.0f) ? 1.0f : -1.0f;
-      }
+      // Avoid quantized lock at ±1.0 by adding smooth error-proportional authority.
+      correction += (0.45f * error);
+      correction = constrain(correction, -55, 55);
 
       int baseRight = 247;
       int baseLeft  = 240;
 
       // reverse steering for backward motion
-      int steeringStep = (int)(correction * 2.0f);
+      int steeringStep = (int)roundf(correction * 2.5f);
       int pwmR = baseRight - steeringStep;
       int pwmL = baseLeft  + steeringStep;
 
