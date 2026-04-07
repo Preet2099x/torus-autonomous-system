@@ -10,9 +10,16 @@ static char lastCommand = '0';
 
 
 // PID gains
-const float Kp = 0.2;
-const float Ki = 0.02; //if robot starts to oscillate, reducing this value (if still happens reduce kp and kd too)
-const float Kd = 0.12;
+
+// forward
+const float Kp_fwd = 0.04f;
+const float Ki_fwd = 0.0f;
+const float Kd_fwd = 0.015f;
+
+// backward
+const float Kp_rev = 0.07f;
+const float Ki_rev = 0.0f;
+const float Kd_rev = 0.015f;
 
 // PID state
 static float integral = 0;
@@ -65,7 +72,7 @@ else if (_data == '1') {
     while (error > 180) error -= 360;
     while (error < -180) error += 360;
 
-    const float headingDeadband = 0.05f;
+    const float headingDeadband = 1.0f;
     if (fabsf(error) < headingDeadband) {
       error = 0.0f;
     }
@@ -80,9 +87,9 @@ else if (_data == '1') {
     float derivative = (error - prevError) / dt;
 
     float correction =
-          Kp * error
-        + Ki * integral
-        + Kd * derivative;
+          Kp_fwd * error
+        + Ki_fwd * integral
+        + Kd_fwd * derivative;
 
     prevError = error;
 
@@ -103,7 +110,7 @@ else if (_data == '1') {
     int baseRight = 237;
     int baseLeft  = 242;
 
-    int steeringStep = (int)roundf(correction);
+    int steeringStep = (int)(correction * 2.0f);
     int pwmR = baseRight - steeringStep;
     int pwmL = baseLeft  + steeringStep;
 
@@ -129,7 +136,7 @@ else if (_data == '1') {
       while (error > 180) error -= 360;
       while (error < -180) error += 360;
 
-      const float headingDeadband = 0.05f;
+      const float headingDeadband = 1.0f;
       if (fabsf(error) < headingDeadband) {
         error = 0.0f;
       }
@@ -141,9 +148,9 @@ else if (_data == '1') {
       float derivative = (error - prevError) / dt;
 
       float correction =
-            Kp * error
-          + Ki * integral
-          + Kd * derivative;
+            Kp_rev * error
+          + Ki_rev * integral
+          + Kd_rev * derivative;
 
       prevError = error;
 
@@ -158,7 +165,7 @@ else if (_data == '1') {
       int baseLeft  = 240;
 
       // reverse steering for backward motion
-      int steeringStep = (int)roundf(correction);
+      int steeringStep = (int)(correction * 2.0f);
       int pwmR = baseRight - steeringStep;
       int pwmL = baseLeft  + steeringStep;
 
