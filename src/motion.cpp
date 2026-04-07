@@ -8,6 +8,68 @@ static float targetHeading = 0;
 
 static char lastCommand = '0';
 
+static int currentPWM_L = 0;
+static int currentPWM_R = 0;
+static int currentDir_L = LOW;
+static int currentDir_R = LOW;
+
+static uint32_t lastRampUpdateL = 0;
+static uint32_t lastRampUpdateR = 0;
+
+const int START_PWM = 10;      // enough to overcome motor deadzone
+const int RAMP_STEP = 2;       // PWM change per ramp interval
+const uint32_t RAMP_INTERVAL_MS = 8;
+
+static int rampPWM(int currentPwm, int targetPwm, uint32_t &lastUpdateMs) {
+  uint32_t nowMs = millis();
+  if ((nowMs - lastUpdateMs) < RAMP_INTERVAL_MS) {
+    return constrain(currentPwm, 0, 255);
+  }
+  lastUpdateMs = nowMs;
+
+  if (currentPwm == 0 && targetPwm > 0) {
+    currentPwm = min(START_PWM, targetPwm);
+  }
+
+  if (currentPwm < targetPwm) {
+    currentPwm += RAMP_STEP;
+    if (currentPwm > targetPwm) currentPwm = targetPwm;
+  } else if (currentPwm > targetPwm) {
+    currentPwm -= RAMP_STEP;
+    if (currentPwm < targetPwm) currentPwm = targetPwm;
+  }
+
+  return constrain(currentPwm, 0, 255);
+}
+
+static void writeRampedMotor(int dirL, int dirR, int targetPwmL, int targetPwmR) {
+  targetPwmL = constrain(targetPwmL, 0, 255);
+  targetPwmR = constrain(targetPwmR, 0, 255);
+
+  if (dirL != currentDir_L && currentPWM_L > 0) {
+    targetPwmL = 0;
+  } else if (currentPWM_L == 0 && dirL != currentDir_L) {
+    currentDir_L = dirL;
+    digitalWrite(dirPin_L, currentDir_L);
+  }
+
+  if (dirR != currentDir_R && currentPWM_R > 0) {
+    targetPwmR = 0;
+  } else if (currentPWM_R == 0 && dirR != currentDir_R) {
+    currentDir_R = dirR;
+    digitalWrite(dirPin_R, currentDir_R);
+  }
+
+  digitalWrite(dirPin_L, currentDir_L);
+  digitalWrite(dirPin_R, currentDir_R);
+
+  currentPWM_L = rampPWM(currentPWM_L, targetPwmL, lastRampUpdateL);
+  currentPWM_R = rampPWM(currentPWM_R, targetPwmR, lastRampUpdateR);
+
+  analogWrite(pwmPin_L, currentPWM_L);
+  analogWrite(pwmPin_R, currentPWM_R);
+}
+
 
 // PID gains
 
@@ -49,6 +111,14 @@ void motion(char _data) {
     debug_targetHeading = latestSerialHeading;
     debug_serialHeading = latestSerialHeading;
 
+    currentPWM_L = 0;
+    currentPWM_R = 0;
+
+    currentDir_L = LOW;
+    currentDir_R = LOW;
+    lastRampUpdateL = millis();
+    lastRampUpdateR = lastRampUpdateL;
+
     digitalWrite(dirPin_L, LOW);
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, 0);
@@ -57,9 +127,6 @@ void motion(char _data) {
   //Forward cmd
 else if (_data == '1') {
     rpmAlter_T = false;
-
-    digitalWrite(dirPin_R, LOW);
-    digitalWrite(dirPin_L, LOW);
     
     if(_data == '1' && lastCommand != '1') {
         targetHeading = latestSerialHeading;
@@ -117,14 +184,10 @@ else if (_data == '1') {
     pwmR = constrain(pwmR, 0, 255);
     pwmL = constrain(pwmL, 0, 255);
 
-    analogWrite(pwmPin_R, pwmR);
-    analogWrite(pwmPin_L, pwmL);
-}
+    writeRampedMotor(LOW, LOW, pwmL, pwmR);
+  }
   else if (_data == '2') {
       rpmAlter_T = false;
-
-      digitalWrite(dirPin_R, HIGH);
-      digitalWrite(dirPin_L, HIGH);
 
       if(_data == '2' && lastCommand != '2') {
           targetHeading = latestSerialHeading;
@@ -172,8 +235,7 @@ else if (_data == '1') {
       pwmR = constrain(pwmR, 0, 255);
       pwmL = constrain(pwmL, 0, 255);
 
-      analogWrite(pwmPin_R, pwmR);
-      analogWrite(pwmPin_L, pwmL);
+      writeRampedMotor(HIGH, HIGH, pwmL, pwmR);
 
       // store debug values
       debug_error = error;
@@ -188,51 +250,64 @@ else if (_data == '1') {
     integral = 0;
     prevError = 0;
 
-    digitalWrite(dirPin_L, LOW);
-    digitalWrite(dirPin_R, HIGH);
-    analogWrite(pwmPin_L, rpmAlter_T == 0 ? 82 : 148);
-    analogWrite(pwmPin_R, rpmAlter_T == 0 ? 80: 146);
+    writeRampedMotor(
+      LOW,
+      HIGH,
+      rpmAlter_T == 0 ? 82 : 148,
+      rpmAlter_T == 0 ? 80 : 146
+    );
   } else if (_data == '4') {
     rpmAlter = false;
     //Serial5.write(rpmAlter_T == 0 ?TLR:BRW);
     //Serial5.write(rpmAlter_T == 0 ?TLL:FLD);
     integral = 0;
     prevError = 0;
-    digitalWrite(dirPin_L, HIGH);
-    digitalWrite(dirPin_R, LOW);
-    analogWrite(pwmPin_L, rpmAlter_T == 0 ? 83 :150);
-    analogWrite(pwmPin_R, rpmAlter_T == 0 ? 80 :147);
+    writeRampedMotor(
+      HIGH,
+      LOW,
+      rpmAlter_T == 0 ? 83 : 150,
+      rpmAlter_T == 0 ? 80 : 147
+    );
   }  else if(_data == '5') {
     rpmAlter_T = false;
     //Serial5.write(rpmAlter == 0 ? FRW: FRD); //TODO: TO BE changed 
     //Serial5.write(TLL);
-    digitalWrite(dirPin_L, LOW);
-    digitalWrite(dirPin_R, LOW);
-    analogWrite(pwmPin_L, rpmAlter == 0 ? 204:245);
-    analogWrite(pwmPin_R, 150);  
+    writeRampedMotor(
+      LOW,
+      LOW,
+      rpmAlter == 0 ? 204 : 245,
+      150
+    );
   } else if(_data == '6') {
     rpmAlter_T = false;
     //Serial5.write(TRR);
     //Serial5.write(rpmAlter == 0 ? FLW : FLD);
-    digitalWrite(dirPin_L, LOW);
-    digitalWrite(dirPin_R, LOW);
-    analogWrite(pwmPin_L, 150);
-    analogWrite(pwmPin_R, rpmAlter == 0 ? 215 :250);
+    writeRampedMotor(
+      LOW,
+      LOW,
+      150,
+      rpmAlter == 0 ? 215 : 250
+    );
   } else if(_data == '7') {
     rpmAlter_T = false;
     //Serial5.write(TLR);
     //Serial5.write(rpmAlter == 0 ? BLW: BLD);
-    digitalWrite(dirPin_L, HIGH);
-    digitalWrite(dirPin_R, HIGH);
-    analogWrite(pwmPin_L, rpmAlter == 0 ? 209 : 251);
-    analogWrite(pwmPin_R, 150); 
+    writeRampedMotor(
+      HIGH,
+      HIGH,
+      rpmAlter == 0 ? 209 : 251,
+      150
+    );
   } else if(_data == '8') {
     rpmAlter_T = false;
     //Serial5.write(rpmAlter == 0 ? BRW : BRD);
     //Serial5.write(TRL);
-    digitalWrite(dirPin_L, HIGH);
-    analogWrite(pwmPin_L, 150);
-    analogWrite(pwmPin_R, rpmAlter == 0 ? 202 :245);
+    writeRampedMotor(
+      HIGH,
+      digitalRead(dirPin_R),
+      150,
+      rpmAlter == 0 ? 202 : 245
+    );
   } else {} 
   lastCommand = _data;
 }
