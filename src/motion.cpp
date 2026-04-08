@@ -68,15 +68,17 @@ static void writeRampedMotor(int dirL, int dirR, int targetPwmL, int targetPwmR)
 
   analogWrite(pwmPin_L, currentPWM_L);
   analogWrite(pwmPin_R, currentPWM_R);
+ // Serial.println(currentPWM_L);
+ // Serial.println(currentPWM_R);
 }
 
 
 // PID gains
 
 // forward
-const float Kp_fwd = 0.04f;
-const float Ki_fwd = 0.0f;
-const float Kd_fwd = 0.015f;
+const float Kp_fwd = 1.0f; //0.04
+const float Ki_fwd = 0.0f;  //0.0
+const float Kd_fwd = 0.05f;
 
 // backward
 const float Kp_rev = 0.04f;
@@ -88,7 +90,7 @@ static float integral = 0;
 static float prevError = 0;
 
 // control timestep (seconds)
-const float dt = 0.1;
+const float dt = 0.3;
 
 // Debug variables
 float debug_error = 0;
@@ -100,6 +102,7 @@ void motion(char _data) {
   if(_data == '0') { 
     rpmAlter = false;
     rpmAlter_T = false;
+    //ifone = true;
     //Serial5.write(0);
     //Serial5.write(128);
 
@@ -123,15 +126,17 @@ void motion(char _data) {
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, 0);
     analogWrite(pwmPin_R, 0);
+
   }  
   //Forward cmd
 else if (_data == '1') {
     rpmAlter_T = false;
     
-    if(_data == '1' && lastCommand != '1') {
+    if(_data == '1' && lastCommand != '1'&& lastCommand == '0') {
         targetHeading = latestSerialHeading;
         integral = 0;
         prevError = 0;
+      
     }
 
     float error = targetHeading - latestSerialHeading;
@@ -139,10 +144,10 @@ else if (_data == '1') {
     while (error > 180) error -= 360;
     while (error < -180) error += 360;
 
-    const float headingDeadband = 0.25f;
-    if (fabsf(error) < headingDeadband) {
-      error = 0.0f;
-    }
+    // const float headingDeadband = 0.25f;
+    // if (fabsf(error) < headingDeadband) {
+    //   error = 0.0f;
+    // }
 
 
     // ---- PID ----
@@ -185,6 +190,7 @@ else if (_data == '1') {
     pwmL = constrain(pwmL, 0, 255);
 
     writeRampedMotor(LOW, LOW, pwmL, pwmR);
+
   }
   else if (_data == '2') {
       rpmAlter_T = false;
@@ -199,10 +205,10 @@ else if (_data == '1') {
       while (error > 180) error -= 360;
       while (error < -180) error += 360;
 
-      const float headingDeadband = 0.25f;
-      if (fabsf(error) < headingDeadband) {
-        error = 0.0f;
-      }
+      // const float headingDeadband = 0.25f;
+      // if (fabsf(error) < headingDeadband) {
+      //   error = 0.0f;
+      // }
 
       // ---- PID ----
       integral += error * dt;
@@ -219,7 +225,7 @@ else if (_data == '1') {
 
       correction = constrain(correction, -40, 40);
 
-      // Avoid quantized lock at ±1.0 by adding smooth error-proportional authority.
+
       correction = constrain(correction, -55, 55);
 
       int baseRight = 247;

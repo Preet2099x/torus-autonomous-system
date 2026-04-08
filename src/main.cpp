@@ -19,6 +19,7 @@ uint8_t NDOF       =     0x0C;
 
 imuData imu;
 
+bool ifone = false;
 int FLW = 0;
 int FRW = 0;
 int BLW = 0;
@@ -303,7 +304,7 @@ void loop() {
   }
 
   if(elaspedTimeControlCounter > timeConstantControlCounter) {
-     data = '0'; //Commenting for Testing //TODO:
+     //data = '0'; //Commenting for Testing //TODO:
     startTimeControlCounter = currentTimeControlCounter;
   }
   

@@ -71,6 +71,7 @@ extern int TRL;
 extern int TLR;
 extern int TLL;
 
+extern bool ifone;
 //Speed Variable
 extern unsigned int addressFLW;
 extern unsigned int addressFRW;
