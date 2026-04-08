@@ -223,7 +223,7 @@ else if (_data == '1') {
       correction = constrain(correction, -55, 55);
 
       int baseRight = 247;
-      int baseLeft  = 240;
+      int baseLeft  = 239;
 
       // reverse steering for backward motion
       int steeringStep = (int)roundf(correction * 6.0f);
