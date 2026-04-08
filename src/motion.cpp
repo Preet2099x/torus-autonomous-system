@@ -79,7 +79,7 @@ const float Ki_fwd = 0.0f;
 const float Kd_fwd = 0.015f;
 
 // backward
-const float Kp_rev = 0.07f;
+const float Kp_rev = 0.04f;
 const float Ki_rev = 0.0f;
 const float Kd_rev = 0.015f;
 
@@ -139,7 +139,7 @@ else if (_data == '1') {
     while (error > 180) error -= 360;
     while (error < -180) error += 360;
 
-    const float headingDeadband = 1.0f;
+    const float headingDeadband = 0.25f;
     if (fabsf(error) < headingDeadband) {
       error = 0.0f;
     }
@@ -199,7 +199,7 @@ else if (_data == '1') {
       while (error > 180) error -= 360;
       while (error < -180) error += 360;
 
-      const float headingDeadband = 1.0f;
+      const float headingDeadband = 0.25f;
       if (fabsf(error) < headingDeadband) {
         error = 0.0f;
       }
@@ -220,16 +220,15 @@ else if (_data == '1') {
       correction = constrain(correction, -40, 40);
 
       // Avoid quantized lock at ±1.0 by adding smooth error-proportional authority.
-      correction += (0.45f * error);
       correction = constrain(correction, -55, 55);
 
       int baseRight = 247;
       int baseLeft  = 240;
 
       // reverse steering for backward motion
-      int steeringStep = (int)roundf(correction * 2.5f);
-      int pwmR = baseRight - steeringStep;
-      int pwmL = baseLeft  + steeringStep;
+      int steeringStep = (int)roundf(correction * 6.0f);
+      int pwmR = baseRight + steeringStep;
+      int pwmL = baseLeft  - steeringStep;
 
       pwmR = constrain(pwmR, 0, 255);
       pwmL = constrain(pwmL, 0, 255);
