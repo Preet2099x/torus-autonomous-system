@@ -95,10 +95,8 @@ int rpmAlter = 0;
 int _dirData = 0;
 
 //Time Variable
-float timeConstant = 100; //MilliSecond 100 | 10 ONLY -> Function-> handletime
+float timeConstant = 100; 
 float startTime, elaspedTime = 0, currentTime;
-// Tuned multipliers derived from tachometer logs
-// Goal: left ~76.5, right ~75.8
 float rpmScale_L = 1.93534;
 float rpmScale_R = 1.94640;
 float latestSerialHeading = 0.0f;
@@ -107,7 +105,7 @@ static bool hasValidHeading = false;
 
 
 //Time Setup Control Counter
-float timeConstantControlCounter = 1000; //Chnage This As per Trail 
+float timeConstantControlCounter = 1000; 
 float startTimeControlCounter, elaspedTimeControlCounter = 0, currentTimeControlCounter;
 
 void setup() {
