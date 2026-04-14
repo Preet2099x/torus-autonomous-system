@@ -76,14 +76,14 @@ static void writeRampedMotor(int dirL, int dirR, int targetPwmL, int targetPwmR)
 // PID gains
 
 // forward
-const float Kp_fwd = 1.0f; //0.04
-const float Ki_fwd = 0.0f;  //0.0
+const float Kp_fwd = 1.0f; 
+const float Ki_fwd = 0.015f; 
 const float Kd_fwd = 0.05f;
 
 // backward
-const float Kp_rev = 0.04f;
+const float Kp_rev = 1.0f;
 const float Ki_rev = 0.0f;
-const float Kd_rev = 0.015f;
+const float Kd_rev = 0.05f;
 
 // PID state
 static float integral = 0;
