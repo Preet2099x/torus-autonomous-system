@@ -1,31 +1,67 @@
-#include <var.h>
-#include <string.h>
-#include <Arduino.h>
-#include <i2c_driver.h>
-#include <i2c_driver_wire.h>
+#include <Wire.h>
 
-void bno_write(uint8_t i2c_addr, uint8_t reg, uint8_t data)  {
-  kire1.beginTransmission(i2c_addr);
-  kire1.write(reg);
-  kire1.write(data);
-  kire1.endTransmission(true);  // send stop
+#define BNO055_ADDR 0x28
+
+int16_t read16(uint8_t reg) {
+  Wire1.beginTransmission(BNO055_ADDR);
+  Wire1.write(reg);
+  Wire1.endTransmission();
+  Wire1.requestFrom(BNO055_ADDR, 2);
+
+  uint8_t lsb = Wire1.read();
+  uint8_t msb = Wire1.read();
+  return (int16_t)(lsb | (msb << 8));
 }
 
-void bno_read_multiple(uint8_t i2c_addr, uint8_t reg, uint8_t *buf, uint8_t length) {
-  for (uint32_t n=0; n<length; n++) {
-    if ((n & 31) == 0) {
-      kire1.beginTransmission(i2c_addr);
-      kire1.write(reg+n);
-      kire1.endTransmission(false);  // send restart
-      kire1.requestFrom(i2c_addr, min(length-n, 32), true);
-    }
-    
-    while(kire1.available()) {
-    *buf++ = kire1.read();
-    }
-  }
+void write8(uint8_t reg, uint8_t val) {
+  Wire1.beginTransmission(BNO055_ADDR);
+  Wire1.write(reg);
+  Wire1.write(val);
+  Wire1.endTransmission();
 }
 
-void thread_func() {
-  while(1) bno_read_multiple(BNO_ADDR, ACC_DATA_X_LSB, (uint8_t*)&imu, sizeof imu);
+void bnoStandaloneSetup() {
+  Serial.begin(115200);
+  Wire1.begin();
+
+  delay(700);
+
+  // CONFIG mode
+  write8(0x3D, 0x00);
+  delay(20);
+
+  // Normal power
+  write8(0x3E, 0x00);
+  delay(10);
+
+  // Page 0
+  write8(0x07, 0x00);
+
+  // NDOF mode (fusion)
+  write8(0x3D, 0x0C);
+  delay(20);
+
+  Serial.println("BNO055 ready");
+}
+
+void bnoStandaloneLoop() {
+  // Euler angles (deg * 16)
+  float heading = read16(0x1A) / 16.0;
+  float roll    = read16(0x1C) / 16.0;
+  float pitch   = read16(0x1E) / 16.0;
+
+  // Gyroscope (deg/s * 16)
+  float gx = read16(0x14) / 16.0;
+  float gy = read16(0x16) / 16.0;
+  float gz = read16(0x18) / 16.0;
+
+  Serial.print("H: "); Serial.print(heading);
+  Serial.print(" | P: "); Serial.print(pitch);
+  Serial.print(" | R: "); Serial.print(roll);
+
+  Serial.print(" || Gx: "); Serial.print(gx);
+  Serial.print(" Gy: "); Serial.print(gy);
+  Serial.print(" Gz: "); Serial.println(gz);
+
+  delay(200);
 }
