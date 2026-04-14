@@ -145,24 +145,14 @@ static void mainBnoInit() {
   Serial.println("BNO055 ready");
 }
 
-static void printMainBnoStatus() {
+static void updateLatestHeadingFromBno() {
   float heading = mainBnoRead16(0x1A) / 16.0f;
-  float roll = mainBnoRead16(0x1C) / 16.0f;
-  float pitch = mainBnoRead16(0x1E) / 16.0f;
 
-  float gx = mainBnoRead16(0x14) / 16.0f;
-  float gy = mainBnoRead16(0x16) / 16.0f;
-  float gz = mainBnoRead16(0x18) / 16.0f;
+  while (heading < 0.0f) heading += 360.0f;
+  while (heading >= 360.0f) heading -= 360.0f;
 
-  Serial.print("H: "); Serial.print(heading);
-  Serial.print(" | P: "); Serial.print(pitch);
-  Serial.print(" | R: "); Serial.print(roll);
-
-  Serial.print(" || Gx: "); Serial.print(gx);
-  Serial.print(" Gy: "); Serial.print(gy);
-  Serial.print(" Gz: "); Serial.println(gz);
+  latestSerialHeading = heading;
 }
-
 
 //Time Setup Control Counter
 float timeConstantControlCounter = 1000; 
@@ -291,8 +281,6 @@ void loop() {
                   lastValidHeading = newHeading;
                 }
               }
-
-              latestSerialHeading = lastValidHeading;
             }
             headingPacketIndex = 0;
             parsingHeadingPacket = false;
@@ -377,6 +365,7 @@ void loop() {
     analogWrite(pwmPin_R, 0);
     data = '0';
   } else if (emergency < 900) {
+    updateLatestHeadingFromBno();
     motion(data);
   } 
   
@@ -402,9 +391,8 @@ void loop() {
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
       Serial.printf(
-      "%c | %3d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f\n",
+      "%c | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f\n",
       data,
-      emergency,
       avgRPM_L,
       avgRPM_R,
       latestSerialHeading,
@@ -412,7 +400,6 @@ void loop() {
       debug_error,
       debug_correction
       );
-      printMainBnoStatus();
       /*Serial.print(" | ");
       Serial.print((s.calib_stat >> 6) & 3);
       Serial.print(" | ");
