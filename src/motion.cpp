@@ -6,7 +6,7 @@ extern float latestSerialHeading;   // heading coming from main.cpp
 
 static float targetHeading = 0;
 
-static char lastCommand = '0';
+static int lastCommand = 0;
 
 static int currentPWM_L = 0;
 static int currentPWM_R = 0;

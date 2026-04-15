@@ -43,9 +43,9 @@ void receiveEvent(int bytesReceived) {
     while(kire.available()) {
         char c = kire.read();
         receivedData += c;
-        Serial.println(receivedData);
+        // Serial.println(receivedData);
     }
-    Serial.println(data);
+    // Serial.println(data);
 int val = mapStringToInt(receivedData);
  if(val > 0){turn = true;}
  else if(val ==0)(turn = false);

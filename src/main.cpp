@@ -297,11 +297,11 @@ void loop() {
         }
 
         if (sawHeadingPrefix) {
-          if (_data == ':') {
+          if(_data == char('m')) {
             parsingHeadingPacket = true;
             headingPacketIndex = 0;
             sawHeadingPrefix = false;
-            continue;
+            data = 0;
           }
           sawHeadingPrefix = false;
         }
@@ -319,7 +319,7 @@ void loop() {
         } else if(_data == char('s')) {
           systemCounter = true;
           printAlter = false; //TODO: Can be Removed for fast testing
-          data = '0';//TODO: Can be Removed for fast testing
+          data = 0;//TODO: Can be Removed for fast testing
           printSetting();
         } else if(_data == char('p')) {
           printAlter =  !printAlter;
@@ -356,7 +356,7 @@ void loop() {
     startTimeControlCounter = currentTimeControlCounter;
   }
   
-  if(emergency > 900) { 
+    if(emergency > 900) { 
     rpmAlter = false;
     //Serial5.write(0);
     //Serial5.write(128);
@@ -364,7 +364,7 @@ void loop() {
     digitalWrite(dirPin_R, LOW);
     analogWrite(pwmPin_L, 0);
     analogWrite(pwmPin_R, 0);
-    data = '0';
+    data = 0;
   } else if (emergency < 900) {
     updateLatestHeadingFromBno();
     motion(data);
@@ -392,8 +392,8 @@ void loop() {
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
       Serial.printf(
-      "%c | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f\n",
-      data,
+        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f\n",
+        data,
       avgRPM_L,
       avgRPM_R,
       latestSerialHeading,
