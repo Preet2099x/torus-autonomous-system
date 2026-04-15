@@ -85,6 +85,10 @@ int lastLSB_R = 0;
 int    delayBrake = 50;
 int pin_Emergency = 15;
 
+const int EMERGENCY_ON_THRESHOLD = 950;
+const int EMERGENCY_OFF_THRESHOLD = 850;
+const uint8_t EMERGENCY_DEBOUNCE_COUNT = 3;
+
 //Handle Print Vsriable
 bool     printAlter = false;
 bool emergencyAlter = true;
@@ -241,6 +245,9 @@ void loop() {
   double avgRPM_R = 0;
 
   int emergency = analogRead(pin_Emergency);//TODO: Comment if emergency is removed 
+  static uint8_t emergencyHighCount = 0;
+  static uint8_t emergencyLowCount = 0;
+  static bool emergencyLatched = false;
   
   //Handle  Time
   currentTime = millis(); 
@@ -297,11 +304,11 @@ void loop() {
         }
 
         if (sawHeadingPrefix) {
-          if(_data == char('m')) {
+          if(_data == ':') {
             parsingHeadingPacket = true;
             headingPacketIndex = 0;
             sawHeadingPrefix = false;
-            data = 0;
+            continue;
           }
           sawHeadingPrefix = false;
         }
@@ -315,7 +322,7 @@ void loop() {
           Serial.print(getTeensySerial());
           Serial.print(" | ");
           Serial.println("Motion Module");
-          data = char('0');
+          data = 0;
         } else if(_data == char('s')) {
           systemCounter = true;
           printAlter = false; //TODO: Can be Removed for fast testing
@@ -356,7 +363,31 @@ void loop() {
     startTimeControlCounter = currentTimeControlCounter;
   }
   
-    if(emergency > 900) { 
+  if (!emergencyLatched) {
+    if (emergency >= EMERGENCY_ON_THRESHOLD) {
+      emergencyHighCount++;
+      if (emergencyHighCount >= EMERGENCY_DEBOUNCE_COUNT) {
+        emergencyLatched = true;
+        emergencyHighCount = 0;
+        emergencyLowCount = 0;
+      }
+    } else {
+      emergencyHighCount = 0;
+    }
+  } else {
+    if (emergency <= EMERGENCY_OFF_THRESHOLD) {
+      emergencyLowCount++;
+      if (emergencyLowCount >= EMERGENCY_DEBOUNCE_COUNT) {
+        emergencyLatched = false;
+        emergencyLowCount = 0;
+        emergencyHighCount = 0;
+      }
+    } else {
+      emergencyLowCount = 0;
+    }
+  }
+
+  if(emergencyLatched) { 
     rpmAlter = false;
     //Serial5.write(0);
     //Serial5.write(128);
@@ -365,7 +396,7 @@ void loop() {
     analogWrite(pwmPin_L, 0);
     analogWrite(pwmPin_R, 0);
     data = 0;
-  } else if (emergency < 900) {
+  } else {
     updateLatestHeadingFromBno();
     motion(data);
   } 

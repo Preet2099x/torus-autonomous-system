@@ -293,7 +293,7 @@ else if (_data == 1) {
     writeRampedMotor(
       LOW,
       LOW,
-      rpmAlter == 0 ? 204 : 245,
+      rpmAlter == 0 ? 224 : 255,
       150
     );
   } else if(_data >= 121 && _data <= 130) {
@@ -304,7 +304,7 @@ else if (_data == 1) {
       LOW,
       LOW,
       150,
-      rpmAlter == 0 ? 215 : 250
+      rpmAlter == 0 ? 235 : 255
     );
   } else if(_data >= 211 && _data <= 220) {
     rpmAlter_T = false;
@@ -313,7 +313,7 @@ else if (_data == 1) {
     writeRampedMotor(
       HIGH,
       HIGH,
-      rpmAlter == 0 ? 209 : 251,
+      rpmAlter == 0 ? 229 : 255,
       150
     );
   } else if(_data >= 221 && _data <= 230) {
@@ -324,7 +324,7 @@ else if (_data == 1) {
       HIGH,
       digitalRead(dirPin_R),
       150,
-      rpmAlter == 0 ? 202 : 245
+      rpmAlter == 0 ? 222 : 255
     );
   } else {} 
   lastCommand = _data;
