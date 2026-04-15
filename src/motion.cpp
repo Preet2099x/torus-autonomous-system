@@ -99,6 +99,20 @@ float debug_serialHeading = 0;
 float debug_correction = 0;
 
 void motion(int _data) {
+  // If the command is not 1 or 2, drop the stored target heading immediately
+  // so steering doesn't chase a stale target even if the same non-1/2
+  // command is repeatedly received.
+  if (_data != 1 && _data != 2) {
+    targetHeading = latestSerialHeading;
+    integral = 0;
+    prevError = 0;
+
+    // Keep telemetry aligned with actual behavior for non-PID commands.
+    debug_error = 0;
+    debug_targetHeading = latestSerialHeading;
+    debug_serialHeading = latestSerialHeading;
+    debug_correction = 0;
+  }
   if(_data == 0) { 
     rpmAlter = false;
     rpmAlter_T = false;
