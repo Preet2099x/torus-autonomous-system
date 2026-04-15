@@ -12,7 +12,7 @@ extern uint8_t CALIB_STAT;  // BNO register SYS Calib Status <7:6>, GYR Calib St
 extern uint8_t OPR_MODE; // BNO register Operation Mode <3:0>
 extern uint8_t NDOF;
 
-extern char data;
+extern int data;
 
 //---------------------
 extern int pwmPin_L;
@@ -97,7 +97,7 @@ int handleEEPROMwrite(String _data, unsigned int address);
 void updateEncoder_L();
 void updateEncoder_R();
 
-void motion(char _data);
+void motion(int _data);
 
 uint32_t getTeensySerial();
 float calcAlphaEMA(float fn);
@@ -109,5 +109,6 @@ long map(long x, long in_min, long in_max, long out_min, long out_max);
 void thread_func();
 void bno_write(uint8_t i2c_addr, uint8_t reg, uint8_t data);
 void bno_read_multiple(uint8_t i2c_addr, uint8_t reg, uint8_t *buf, uint8_t length);
-
+int mapStringToInt(String str);
+extern bool turn;
 #endif

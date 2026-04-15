@@ -19,6 +19,7 @@ uint8_t OPR_MODE   =     0x3D; // BNO register Operation Mode <3:0>
 uint8_t NDOF       =     0x0C;
 
 imuData imu;
+bool turn = false;
 
 bool ifone = false;
 int FLW = 0;
@@ -90,7 +91,7 @@ bool emergencyAlter = true;
 bool  systemCounter = false;
 
 //Control Variable
-char  data = '0';
+int  data = 0;
 int rpmAlter_T = 0;
 int rpmAlter = 0;
 int _dirData = 0;

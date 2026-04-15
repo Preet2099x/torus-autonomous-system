@@ -98,8 +98,8 @@ float debug_targetHeading = 0;
 float debug_serialHeading = 0;
 float debug_correction = 0;
 
-void motion(char _data) {
-  if(_data == '0') { 
+void motion(int _data) {
+  if(_data == 0) { 
     rpmAlter = false;
     rpmAlter_T = false;
     //ifone = true;
@@ -129,10 +129,10 @@ void motion(char _data) {
 
   }  
   //Forward cmd
-else if (_data == '1') {
+else if (_data == 1) {
     rpmAlter_T = false;
     
-    if(_data == '1' && lastCommand != '1'&& lastCommand == '0') {
+    if(_data == 1 && lastCommand != 1&& lastCommand == 0  ) {
         targetHeading = latestSerialHeading;
         integral = 0;
         prevError = 0;
@@ -192,10 +192,10 @@ else if (_data == '1') {
     writeRampedMotor(LOW, LOW, pwmL, pwmR);
 
   }
-  else if (_data == '2') {
+  else if (_data == 2) {
       rpmAlter_T = false;
 
-      if(_data == '2' && lastCommand != '2') {
+      if(_data == 2 && lastCommand != 2) {
           targetHeading = latestSerialHeading;
           integral = 0;
           prevError = 0;
@@ -247,7 +247,7 @@ else if (_data == '1') {
       debug_serialHeading = latestSerialHeading;
       debug_correction = correction;
   }
-  else if (_data == '3') {
+  else if (_data >= 11 && _data <= 20) {
     rpmAlter = false;
     //Serial5.write(rpmAlter_T == 0 ?TRR:FRD);
     //Serial5.write(rpmAlter_T == 0 ?TRL:BLW);
@@ -260,7 +260,7 @@ else if (_data == '1') {
       rpmAlter_T == 0 ? 82 : 148,
       rpmAlter_T == 0 ? 80 : 146
     );
-  } else if (_data == '4') {
+  } else if (_data >= 21 && _data <= 30) {
     rpmAlter = false;
     //Serial5.write(rpmAlter_T == 0 ?TLR:BRW);
     //Serial5.write(rpmAlter_T == 0 ?TLL:FLD);
@@ -272,7 +272,7 @@ else if (_data == '1') {
       rpmAlter_T == 0 ? 83 : 150,
       rpmAlter_T == 0 ? 80 : 147
     );
-  }  else if(_data == '5') {
+  }  else if(_data >=111 && _data <= 120) {
     rpmAlter_T = false;
     //Serial5.write(rpmAlter == 0 ? FRW: FRD); //TODO: TO BE changed 
     //Serial5.write(TLL);
@@ -282,7 +282,7 @@ else if (_data == '1') {
       rpmAlter == 0 ? 204 : 245,
       150
     );
-  } else if(_data == '6') {
+  } else if(_data >= 121 && _data <= 130) {
     rpmAlter_T = false;
     //Serial5.write(TRR);
     //Serial5.write(rpmAlter == 0 ? FLW : FLD);
@@ -292,7 +292,7 @@ else if (_data == '1') {
       150,
       rpmAlter == 0 ? 215 : 250
     );
-  } else if(_data == '7') {
+  } else if(_data >= 211 && _data <= 220) {
     rpmAlter_T = false;
     //Serial5.write(TLR);
     //Serial5.write(rpmAlter == 0 ? BLW: BLD);
@@ -302,7 +302,7 @@ else if (_data == '1') {
       rpmAlter == 0 ? 209 : 251,
       150
     );
-  } else if(_data == '8') {
+  } else if(_data >= 221 && _data <= 230) {
     rpmAlter_T = false;
     //Serial5.write(rpmAlter == 0 ? BRW : BRD);
     //Serial5.write(TRL);
