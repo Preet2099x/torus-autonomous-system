@@ -9,6 +9,7 @@
 #include <TeensyThreads.h>
 #include <i2c_driver_wire.h>
 #include <Wire.h>
+#include "distance.h"
 
 int SLAVE_ADDRESS = 0x72;
 
@@ -212,6 +213,9 @@ void setup() {
 
   //Read Permanent Data 
   readEEPROM();
+
+  // Distance module init
+  distanceInit();
 
   Serial5.write(0);
   Serial5.write(192);
@@ -423,7 +427,7 @@ void loop() {
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
       Serial.printf(
-        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f\n",
+        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f | Dist:%6.3f\n",
         data,
       avgRPM_L,
       avgRPM_R,
@@ -431,6 +435,7 @@ void loop() {
       debug_targetHeading,
       debug_error,
       debug_correction
+      , distanceGetTotal_m()
       );
       /*Serial.print(" | ");
       Serial.print((s.calib_stat >> 6) & 3);
@@ -442,7 +447,10 @@ void loop() {
       Serial.println((s.calib_stat >> 0) & 3); */
    }
 
-   encoderValue_L = encoderValue_R = 0;
+  // Update fused distance using encoder ticks for this interval
+  distanceUpdate(encoderValue_L, encoderValue_R, elaspedTime / 1000.0f);
+
+  encoderValue_L = encoderValue_R = 0;
 
   }
 

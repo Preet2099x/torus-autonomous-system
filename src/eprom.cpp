@@ -2,6 +2,14 @@
 #include <EEPROM.h>
 #include <Arduino.h>
 
+static bool applySettingUpdate(const String &key, const String &payload, const char *name, int &target, unsigned int address) {
+  if (key != name) {
+    return false;
+  }
+  target = handleEEPROMwrite(payload, address);
+  return true;
+}
+
 
 void printSetting() {
   Serial.println("Chaging to Setting Mode");
@@ -19,33 +27,28 @@ void printSetting() {
 }
 
 void updatedEEPROM(String _data) {
-  if(_data.substring(0,_data.indexOf(':')) == "TRR") {
-    TRR = handleEEPROMwrite(_data, addressTRR); 
-  } else if(_data.substring(0,_data.indexOf(':')) == "TRL") {
-    TRL = handleEEPROMwrite(_data, addressTRL);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "TLR") {
-    TLR = handleEEPROMwrite(_data, addressTLR);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "TLL") {
-    TLL = handleEEPROMwrite(_data, addressTLL);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "FRW") {
-    FRW = handleEEPROMwrite(_data, addressFRW);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "FLW") {
-    FLW = handleEEPROMwrite(_data, addressFLW);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "BRW") {
-    BRW = handleEEPROMwrite(_data, addressBRW);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "BLW") {
-    BLW = handleEEPROMwrite(_data, addressBLW);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "FRD") {
-    FRD = handleEEPROMwrite(_data, addressFRD);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "FLD") {
-    FLD = handleEEPROMwrite(_data, addressFLD);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "BRD") {
-    BRD = handleEEPROMwrite(_data, addressBRD);
-  }  else if(_data.substring(0,_data.indexOf(':')) == "BLD") {
-    BLD = handleEEPROMwrite(_data, addressBLD);
-  }  else {
+  const int separatorIndex = _data.indexOf(':');
+  if (separatorIndex < 0) {
     Serial.println("Enter Correct Variable");
-  } 
+    return;
+  }
+
+  const String key = _data.substring(0, separatorIndex);
+
+  if (applySettingUpdate(key, _data, "TRR", TRR, addressTRR)) return;
+  if (applySettingUpdate(key, _data, "TRL", TRL, addressTRL)) return;
+  if (applySettingUpdate(key, _data, "TLR", TLR, addressTLR)) return;
+  if (applySettingUpdate(key, _data, "TLL", TLL, addressTLL)) return;
+  if (applySettingUpdate(key, _data, "FRW", FRW, addressFRW)) return;
+  if (applySettingUpdate(key, _data, "FLW", FLW, addressFLW)) return;
+  if (applySettingUpdate(key, _data, "BRW", BRW, addressBRW)) return;
+  if (applySettingUpdate(key, _data, "BLW", BLW, addressBLW)) return;
+  if (applySettingUpdate(key, _data, "FRD", FRD, addressFRD)) return;
+  if (applySettingUpdate(key, _data, "FLD", FLD, addressFLD)) return;
+  if (applySettingUpdate(key, _data, "BRD", BRD, addressBRD)) return;
+  if (applySettingUpdate(key, _data, "BLD", BLD, addressBLD)) return;
+
+  Serial.println("Enter Correct Variable");
 }
 
 int handleEEPROMwrite(String _data, unsigned int address) {
