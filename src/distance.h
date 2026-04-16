@@ -21,13 +21,8 @@
 // Must apply this the same way as in your RPM formula in main.cpp.
 #define MECH_RATIO           1.6f
 
-// ── Per-wheel empirical scale factors ────────────────────────────────────
-// These were originally needed to correct the OLD (broken) encoder formula
-// that undercounted by ~1.94×.  With the CORRECT gray-code encoder they
-// are NO LONGER applied to distance — only the RPM path in main.cpp
-// still uses them (via encoderValueLegacy).
-#define RPM_SCALE_L          1.93534f
-#define RPM_SCALE_R          1.94640f
+// rpmScale_L/R removed — were compensating for old broken encoder formula
+// and are no longer needed with correct gray-code encoder
 
 // ── Complementary filter weight ──────────────────────────────────────────
 // 0.95 = trust encoder 95%, trust accelerometer 5%

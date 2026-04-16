@@ -13,11 +13,8 @@ static const uint8_t LIA_X_LSB      = 0x28;   // forward axis  ← change to 0x2
 // ─────────────────────────────────────────────
 //  Pre-computed: effective ticks per WHEEL revolution
 //
-//  With the CORRECT gray-code encoder the ticks map directly:
+//  With the correct gray-code encoder the ticks map directly:
 //      wheel_revs = ticks / (TICKS_PER_ENC_REV * MECH_RATIO)
-//
-//  rpmScale is NOT applied here — it was a correction for the
-//  old broken encoder formula and is only used in the RPM path.
 // ─────────────────────────────────────────────
 static const float EFF_TICKS_PER_WHEEL_REV =
     TICKS_PER_ENC_REV * MECH_RATIO;   // 4000 * 1.6 = 6400 ticks
@@ -82,7 +79,6 @@ void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s) {
     //
     // ticksToMetres() already applies:
     //   - mechanical ratio (/ 1.6)
-    //   - per-wheel scale correction (* rpmScale_L / R)
     // so this is the TRUE wheel distance, not the encoder-shaft distance.
     //
     float encDist = ticksToMetres(encTicks_L, encTicks_R);
