@@ -72,12 +72,14 @@ int encoderPin_2_R = 4;
 
 volatile int lastEncoded_L = 0;
 volatile long encoderValue_L = 0;
+volatile long encoderValueLegacy_L = 0;
 long lastencoderValue_L = 0;
 int lastMSB_L = 0;
 int lastLSB_L = 0;
 
 volatile int lastEncoded_R = 0;
 volatile long encoderValue_R = 0;
+volatile long encoderValueLegacy_R = 0;
 long lastencoderValue_R = 0;
 int lastMSB_R = 0;
 int lastLSB_R = 0;
@@ -408,9 +410,9 @@ void loop() {
   if (elaspedTime > timeConstant) {
     startTime = currentTime;
 
-    //RPM Calculation
-    rpm_L = ((abs(encoderValue_L)* 60 * handletime(timeConstant)) / 4000.00) * rpmScale_L / 1.6; 
-    rpm_R = ((abs(encoderValue_R)* 60 * handletime(timeConstant)) / 4000.00) * rpmScale_R / 1.6;
+    //RPM Calculation (uses legacy encoder values — calibrated with old formula)
+    rpm_L = ((abs(encoderValueLegacy_L)* 60 * handletime(timeConstant)) / 4000.00) * rpmScale_L / 1.6; 
+    rpm_R = ((abs(encoderValueLegacy_R)* 60 * handletime(timeConstant)) / 4000.00) * rpmScale_R / 1.6;
     //rpm = (No of Pluses/Total Pules) * 1sec 
     //Total Pulse = Pulse * 4 where is changes in both the phases
     //SEC -> MilliSec 60*100 -> TimeConstant will be 100
@@ -451,6 +453,7 @@ void loop() {
   distanceUpdate(encoderValue_L, encoderValue_R, elaspedTime / 1000.0f);
 
   encoderValue_L = encoderValue_R = 0;
+  encoderValueLegacy_L = encoderValueLegacy_R = 0;
 
   }
 

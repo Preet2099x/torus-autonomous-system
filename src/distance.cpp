@@ -13,20 +13,14 @@ static const uint8_t LIA_X_LSB      = 0x28;   // forward axis  ← change to 0x2
 // ─────────────────────────────────────────────
 //  Pre-computed: effective ticks per WHEEL revolution
 //
-//  Your RPM formula in main.cpp is:
-//      rpm = (ticks / 4000) * 60 * timeFactor * rpmScale / 1.6
+//  With the CORRECT gray-code encoder the ticks map directly:
+//      wheel_revs = ticks / (TICKS_PER_ENC_REV * MECH_RATIO)
 //
-//  Rearranging to get wheel revolutions from ticks:
-//      wheel_revs = ticks * rpmScale / (4000 * 1.6)
-//
-//  So the "effective ticks per wheel revolution" for each side is:
-//      eff_ticks = TICKS_PER_ENC_REV * MECH_RATIO / rpmScale
+//  rpmScale is NOT applied here — it was a correction for the
+//  old broken encoder formula and is only used in the RPM path.
 // ─────────────────────────────────────────────
-static const float EFF_TICKS_PER_WHEEL_REV_L =
-    (TICKS_PER_ENC_REV * MECH_RATIO) / RPM_SCALE_L;   // ≈ 3305 ticks
-
-static const float EFF_TICKS_PER_WHEEL_REV_R =
-    (TICKS_PER_ENC_REV * MECH_RATIO) / RPM_SCALE_R;   // ≈ 3289 ticks
+static const float EFF_TICKS_PER_WHEEL_REV =
+    TICKS_PER_ENC_REV * MECH_RATIO;   // 4000 * 1.6 = 6400 ticks
 
 static const float WHEEL_CIRC_M = float(M_PI) * WHEEL_DIAMETER_M;
 
@@ -62,16 +56,13 @@ static float readLIA_ms2() {
 /**
  * Convert raw encoder ticks → actual wheel distance (metres).
  *
- * Formula mirrors your RPM line exactly:
- *   wheel_revs = ticks * rpmScale / (TICKS_PER_ENC_REV * MECH_RATIO)
+ * With the correct gray-code encoder:
+ *   wheel_revs = ticks / (TICKS_PER_ENC_REV * MECH_RATIO)
  *   distance   = wheel_revs * wheel_circumference
- *
- * The two sides use their own scale factors because your tachometer
- * tests showed slightly different values (1.93534 vs 1.94640).
  */
 static float ticksToMetres(long ticks_L, long ticks_R) {
-    float revsL = (float)abs(ticks_L) / EFF_TICKS_PER_WHEEL_REV_L;
-    float revsR = (float)abs(ticks_R) / EFF_TICKS_PER_WHEEL_REV_R;
+    float revsL = (float)abs(ticks_L) / EFF_TICKS_PER_WHEEL_REV;
+    float revsR = (float)abs(ticks_R) / EFF_TICKS_PER_WHEEL_REV;
     float avgRevs = (revsL + revsR) * 0.5f;
     return avgRevs * WHEEL_CIRC_M;
 }

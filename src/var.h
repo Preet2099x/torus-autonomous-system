@@ -31,6 +31,7 @@ extern int encoderPin_2_L;
 //Encoder Variable L
 extern volatile int lastEncoded_L;
 extern volatile long encoderValue_L;
+extern volatile long encoderValueLegacy_L;  // legacy counter for RPM (old formula)
 extern long lastencoderValue_L;
 extern int lastMSB_L;
 extern int lastLSB_L;
@@ -43,6 +44,7 @@ extern int encoderPin_2_R;
 //Encoder Variable R
 extern volatile int lastEncoded_R;
 extern volatile long encoderValue_R;
+extern volatile long encoderValueLegacy_R;  // legacy counter for RPM (old formula)
 extern long lastencoderValue_R;
 extern int lastMSB_R;
 extern int lastLSB_R;

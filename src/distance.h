@@ -22,9 +22,10 @@
 #define MECH_RATIO           1.6f
 
 // ── Per-wheel empirical scale factors ────────────────────────────────────
-// Copied directly from main.cpp.
-// These correct for the residual gap between encoder ticks and the
-// tachometer reading AFTER the 1.6 mechanical ratio is already applied.
+// These were originally needed to correct the OLD (broken) encoder formula
+// that undercounted by ~1.94×.  With the CORRECT gray-code encoder they
+// are NO LONGER applied to distance — only the RPM path in main.cpp
+// still uses them (via encoderValueLegacy).
 #define RPM_SCALE_L          1.93534f
 #define RPM_SCALE_R          1.94640f
 
