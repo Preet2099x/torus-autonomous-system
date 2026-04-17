@@ -268,11 +268,17 @@ void loop() {
 
   
   //Handle Serial Commands
+  // ── Numeric command buffer ──
+  // Accumulates typed digits so you can type e.g. "11\n" and get int 11
+  static char  cmdBuf[16];
+  static int   cmdBufIdx = 0;
+
   if(Serial.available()) {
     if(systemCounter == false) {
       while (Serial.available()) {
         int _data = Serial.read();
 
+        // ── Heading packet parser (H:xxx.x) ──
         if (parsingHeadingPacket) {
           bool isHeadingNumberChar = (_data >= '0' && _data <= '9') || _data == '.' || _data == '-' || _data == '+';
 
@@ -293,7 +299,7 @@ void loop() {
                 if (diff > 180) diff -= 360;
                 if (diff < -180) diff += 360;
 
-                // guard-rail filter (was too strict at 10 deg and froze updates)
+                // guard-rail filter
                 if (fabsf(diff) <= 45.0f) {
                   lastValidHeading = newHeading;
                 }
@@ -327,15 +333,16 @@ void loop() {
           continue;
         }
 
-        if(_data == char('m')) {
+        // ── Special single-char commands ──
+        if(_data == 'm') {
            Serial.print(getTeensySerial());
            Serial.print(" | ");
            Serial.println("Motion Module");
            data = 0;
-         } else if(_data == char('T') || _data == char('t')) {
+           cmdBufIdx = 0;  // flush any partial numeric input
+         } else if(_data == 'T' || _data == 't') {
            // ── Track-line command: read until newline ──
            // e.g.  T:F20,R90,F10,R90,S
-           // We already consumed 'T', now look for ':' then the payload
            char trackBuf[256];
            int  trackIdx = 0;
            bool gotColon = false;
@@ -358,34 +365,57 @@ void loop() {
            } else {
              Serial.println("[AUTO] Empty track string.");
            }
-         } else if(_data == char('X') || _data == char('x')) {
-           // Abort autonomous track
+           cmdBufIdx = 0;
+         } else if(_data == 'X' || _data == 'x') {
            autonomousAbort();
-         } else if(_data == char('s')) {
+           cmdBufIdx = 0;
+         } else if(_data == 's') {
            systemCounter = true;
-           printAlter = false; //TODO: Can be Removed for fast testing
-           data = 0;//TODO: Can be Removed for fast testing
+           printAlter = false;
+           data = 0;
            printSetting();
-         } else if(_data == char('p')) {
+           cmdBufIdx = 0;
+         } else if(_data == 'p') {
            printAlter =  !printAlter;
-         } else if(_data == char('a')) {
-           if (data != '3' || data != '4' || data != '0') {
+           cmdBufIdx = 0;
+         } else if(_data == 'a') {
+           if (data != 3 && data != 4 && data != 0) {
                rpmAlter = !rpmAlter; 
-         } } else if(_data == char('b')) {
-           if (data != '1' || data != '2' || data != '0') {
+           }
+           cmdBufIdx = 0;
+         } else if(_data == 'b') {
+           if (data != 1 && data != 2 && data != 0) {
                rpmAlter_T = !rpmAlter_T; 
-         } } else if(_data != 10) {
-           // Manual command — abort any running autonomous track
-           if (autonomousIsRunning()) {
-             autonomousAbort();
            }
-           data = _data;
-           if(_data == data && elaspedTimeControlCounter < timeConstantControlCounter) {
-             startTimeControlCounter = currentTimeControlCounter;
-           } else {
-             data = _data;
-             startTimeControlCounter = currentTimeControlCounter;
+           cmdBufIdx = 0;
+         }
+         // ── Numeric input: buffer digits, parse on Enter ──
+         else if (_data >= '0' && _data <= '9') {
+           // Accumulate digit characters
+           if (cmdBufIdx < (int)sizeof(cmdBuf) - 1) {
+             cmdBuf[cmdBufIdx++] = (char)_data;
            }
+         }
+         else if (_data == '\n' || _data == '\r') {
+           // Enter pressed — convert buffered digits to int
+           if (cmdBufIdx > 0) {
+             cmdBuf[cmdBufIdx] = '\0';
+             int newCmd = atoi(cmdBuf);
+
+             // Manual command — abort any running autonomous track
+             if (autonomousIsRunning()) {
+               autonomousAbort();
+             }
+             data = newCmd;
+             startTimeControlCounter = currentTimeControlCounter;
+
+             Serial.printf("[CMD] data = %d\n", data);
+           }
+           cmdBufIdx = 0;
+         }
+         else {
+           // Unknown character — ignore
+           cmdBufIdx = 0;
          }
       }
     } else {

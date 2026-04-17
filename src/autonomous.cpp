@@ -64,13 +64,31 @@ static bool         s_running        = false;
 static float  s_segStartDist_m      = 0.0f;   // distanceGetTotal at segment start
 static float  s_segStartHeading     = 0.0f;   // heading at segment start
 static float  s_segTargetHeading    = 0.0f;   // target heading for rotation segments
+static float  s_segTotalAngle       = 0.0f;   // total degrees to rotate (positive)
+static float  s_segAccumAngle       = 0.0f;   // accumulated signed rotation (+ = CW)
+static float  s_segPrevHeading      = 0.0f;   // previous heading for delta tracking
 static bool   s_segInitialised      = false;
 
-// Heading-turn tolerance (degrees)
-static const float HEADING_TOLERANCE = 0.0f;
+// Settling state: brief pause between segments to let motors/IMU settle
+static bool   s_settling            = false;
+static unsigned long s_settleStart  = 0;
+static const unsigned long SETTLE_TIME_MS = 150;  // ms to pause between segments
 
-// Distance tolerance (metres)
-static const float DISTANCE_TOLERANCE = 0.00f;  // 5 cm
+// Heading-turn tolerance (degrees)
+static const float HEADING_TOLERANCE = 1.5f;
+
+// Rotation braking compensation (degrees)
+// Stop command is issued slightly early to account for inertial turn overshoot.
+static const float ROT_BRAKING_OVERSHOOT_DEG = 2.0f;
+
+// Distance braking compensation (metres)
+// The robot overshoots slightly after motors stop due to inertia.
+// This value is subtracted from the target so the robot hits the exact mark.
+static const float BRAKING_OVERSHOOT_M = 0.02f;
+
+// Deceleration approach distance (metres)
+// When within this distance of target, apply slow speed
+static const float DECEL_APPROACH_M = 0.15f;
 
 // ── helpers ──────────────────────────────────
 
@@ -80,12 +98,16 @@ static float normaliseHeading(float h) {
     return h;
 }
 
+/// Signed shortest-arc difference (from → to), range [-180, +180]
 static float headingDiff(float from, float to) {
     float d = to - from;
     while (d >  180.0f) d -= 360.0f;
     while (d < -180.0f) d += 360.0f;
     return d;
 }
+
+// (delta-accumulation is used instead of point-to-point comparison
+//  to avoid 180° ambiguity bugs)
 
 // ── parsing ──────────────────────────────────
 
@@ -159,6 +181,7 @@ bool autonomousStartTrack(const char* trackStr) {
 
     s_running        = true;
     s_segInitialised = false;
+    s_settling       = false;
     Serial.println("[AUTO] Track started.");
     return true;
 }
@@ -170,6 +193,7 @@ void autonomousInit() {
     s_trackLen   = 0;
     s_currentSeg = 0;
     s_segInitialised = false;
+    s_settling       = false;
     measuredDistanceInit();
 }
 
@@ -200,17 +224,23 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
                 data = 2;
                 break;
             case SEG_ROTATE_R:
+                // CW rotation: target = current + degrees
+                s_segTotalAngle    = seg.value;
                 s_segTargetHeading = normaliseHeading(currentHeading + seg.value);
-                Serial.printf("[AUTO] Seg %d: Rotate R %.1f° (target %.1f°)\n",
-                              s_currentSeg, seg.value, s_segTargetHeading);
-                // Use turn-right command range (11-20)
+                s_segAccumAngle    = 0.0f;
+                s_segPrevHeading   = currentHeading;
+                Serial.printf("[AUTO] Seg %d: Rotate R %.1f° (start %.1f° → target %.1f°)\n",
+                              s_currentSeg, seg.value, currentHeading, s_segTargetHeading);
                 data = 11;
                 break;
             case SEG_ROTATE_L:
+                // CCW rotation: target = current - degrees
+                s_segTotalAngle    = seg.value;
                 s_segTargetHeading = normaliseHeading(currentHeading - seg.value);
-                Serial.printf("[AUTO] Seg %d: Rotate L %.1f° (target %.1f°)\n",
-                              s_currentSeg, seg.value, s_segTargetHeading);
-                // Use turn-left command range (21-30)
+                s_segAccumAngle    = 0.0f;
+                s_segPrevHeading   = currentHeading;
+                Serial.printf("[AUTO] Seg %d: Rotate L %.1f° (start %.1f° → target %.1f°)\n",
+                              s_currentSeg, seg.value, currentHeading, s_segTargetHeading);
                 data = 21;
                 break;
             case SEG_STOP:
@@ -223,6 +253,21 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
         s_segInitialised = true;
     }
 
+    // ── Handle settling pause between segments ────────
+    if (s_settling) {
+        data = 0;  // motors off during settle
+        if ((millis() - s_settleStart) >= SETTLE_TIME_MS) {
+            s_settling = false;
+            s_segInitialised = false;
+            s_currentSeg++;
+            if (s_currentSeg >= s_trackLen) {
+                s_running = false;
+                Serial.println("[AUTO] Track complete.");
+            }
+        }
+        return;
+    }
+
     // ── Check if segment is complete ─────────────────
     bool complete = false;
 
@@ -230,20 +275,46 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
         case SEG_FORWARD:
         case SEG_BACKWARD: {
             float travelled = currentDist_m - s_segStartDist_m;
-            if (travelled >= (seg.value - DISTANCE_TOLERANCE)) {
+            // Effective target accounts for braking overshoot
+            float effectiveTarget = seg.value - BRAKING_OVERSHOOT_M;
+            if (effectiveTarget < 0.0f) effectiveTarget = 0.0f;
+
+            if (travelled >= effectiveTarget) {
                 complete = true;
-                Serial.printf("[AUTO] Seg %d done — travelled %.3f m\n",
-                              s_currentSeg, travelled);
+                Serial.printf("[AUTO] Seg %d done — travelled %.3f m (target %.3f m)\n",
+                              s_currentSeg, travelled, seg.value);
             }
             break;
         }
-        case SEG_ROTATE_R:
-        case SEG_ROTATE_L: {
-            float remaining = fabsf(headingDiff(currentHeading, s_segTargetHeading));
-            if (remaining <= HEADING_TOLERANCE) {
+        case SEG_ROTATE_R: {
+            // CW rotation: accumulate small heading deltas each loop
+            float delta = headingDiff(s_segPrevHeading, currentHeading); // signed
+            s_segAccumAngle += delta;   // positive = CW progress
+            s_segPrevHeading = currentHeading;
+
+            float swept = s_segAccumAngle;  // CW is positive
+            float effectiveTarget = s_segTotalAngle - ROT_BRAKING_OVERSHOOT_DEG;
+            if (effectiveTarget < 0.0f) effectiveTarget = 0.0f;
+            if (swept >= (effectiveTarget - HEADING_TOLERANCE)) {
                 complete = true;
-                Serial.printf("[AUTO] Seg %d done — heading %.1f° (target %.1f°)\n",
-                              s_currentSeg, currentHeading, s_segTargetHeading);
+                Serial.printf("[AUTO] Seg %d done — heading %.1f° (target %.1f°, swept %.1f°)\n",
+                              s_currentSeg, currentHeading, s_segTargetHeading, swept);
+            }
+            break;
+        }
+        case SEG_ROTATE_L: {
+            // CCW rotation: accumulate small heading deltas each loop
+            float delta = headingDiff(s_segPrevHeading, currentHeading); // signed
+            s_segAccumAngle += delta;   // negative = CCW progress
+            s_segPrevHeading = currentHeading;
+
+            float swept = -s_segAccumAngle;  // flip sign: CCW progress is positive
+            float effectiveTarget = s_segTotalAngle - ROT_BRAKING_OVERSHOOT_DEG;
+            if (effectiveTarget < 0.0f) effectiveTarget = 0.0f;
+            if (swept >= (effectiveTarget - HEADING_TOLERANCE)) {
+                complete = true;
+                Serial.printf("[AUTO] Seg %d done — heading %.1f° (target %.1f°, swept %.1f°)\n",
+                              s_currentSeg, currentHeading, s_segTargetHeading, swept);
             }
             break;
         }
@@ -253,16 +324,10 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
     }
 
     if (complete) {
-        // Brief stop between segments to settle
+        // Enter settling phase: stop motors briefly before next segment
         data = 0;
-
-        s_currentSeg++;
-        s_segInitialised = false;
-
-        if (s_currentSeg >= s_trackLen) {
-            s_running = false;
-            Serial.println("[AUTO] Track complete.");
-        }
+        s_settling    = true;
+        s_settleStart = millis();
     }
 }
 

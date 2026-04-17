@@ -28,7 +28,7 @@
 // 0.95 = trust encoder 95%, trust accelerometer 5%
 // Raise toward 1.0 on clean flat floors.
 // Lower toward 0.85 on carpet / ramps where slip is more likely.
-#define COMP_FILTER_ALPHA    0.95f
+#define COMP_FILTER_ALPHA    1.0f
 
 // ── BNO055 LIA scale ─────────────────────────────────────────────────────
 // Default: 1 m/s² = 100 LSB
