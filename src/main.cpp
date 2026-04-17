@@ -92,6 +92,9 @@ bool     printAlter = false;
 bool emergencyAlter = true;
 bool  systemCounter = false;
 
+// Serial Emergency Stop — toggled by sending 'e' or 'E' over Serial
+static bool serialEmergencyStop = false;
+
 //Control Variable
 int  data = 0;
 int rpmAlter_T = 0;
@@ -361,6 +364,18 @@ void loop() {
          } else if(_data == char('X') || _data == char('x')) {
            // Abort autonomous track
            autonomousAbort();
+         } else if(_data == char('E') || _data == char('e')) {
+           // ── Serial Emergency Stop toggle ──
+           serialEmergencyStop = !serialEmergencyStop;
+           if (serialEmergencyStop) {
+             Serial.println("[ESTOP] >> SERIAL EMERGENCY STOP ACTIVATED <<");
+             if (autonomousIsRunning()) {
+               autonomousAbort();
+             }
+             data = 0;
+           } else {
+             Serial.println("[ESTOP] >> SERIAL EMERGENCY STOP RELEASED <<");
+           }
          } else if(_data == char('s')) {
            systemCounter = true;
            printAlter = false; //TODO: Can be Removed for fast testing
@@ -429,7 +444,7 @@ void loop() {
     }
   }
 
-  if(emergencyLatched) { 
+  if(emergencyLatched || serialEmergencyStop) { 
     rpmAlter = false;
     //Serial5.write(0);
     //Serial5.write(128);
@@ -438,6 +453,10 @@ void loop() {
     analogWrite(pwmPin_L, 0);
     analogWrite(pwmPin_R, 0);
     data = 0;
+    // Abort autonomous track if it was running during emergency
+    if (autonomousIsRunning()) {
+      autonomousAbort();
+    }
   } else {
     updateLatestHeadingFromBno();
 
@@ -481,7 +500,7 @@ void loop() {
       float reportedRPM_R = avgRPM_R * adjustingfactor * sideFactor_R;
 
       Serial.printf(
-        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f | Dist:%6.3f | MDist:%6.3f",
+        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f | Dist:%6.3f | MDist:%6.3f | Vel:%5.2f",
         data,
       reportedRPM_L,
       reportedRPM_R,
@@ -491,9 +510,17 @@ void loop() {
       debug_correction
       , distanceGetTotal_m()
       , measuredDistanceGet_m()
+      , distanceGetVelocity_ms()
       );
       if (autonomousIsRunning()) {
-        Serial.printf(" | [SEG %d]", autonomousCurrentSegment());
+        Serial.printf(" | [AUTO %d/%d Rem:%+.3f Err:%+.3f]",
+                      autonomousCurrentSegment() + 1,
+                      autonomousTotalSegments(),
+                      autonomousGetSegmentError(),
+                      autonomousGetLastSegError());
+      }
+      if (serialEmergencyStop) {
+        Serial.print(" | [ESTOP]");
       }
       Serial.println();
       /*Serial.print(" | ");

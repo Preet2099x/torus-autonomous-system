@@ -35,8 +35,8 @@
 #define BNO_LIA_SCALE        100.0f
 
 // ── Acceleration deadband (m/s²) ─────────────────────────────────────────
-// Values below this are clamped to zero to suppress noise at rest
-#define ACCEL_DEADBAND       0.08f
+// Set to 0 — no deadband, all accel values pass through
+#define ACCEL_DEADBAND       0.0f
 
 // ─────────────────────────────────────────────
 //  PUBLIC API

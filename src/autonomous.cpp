@@ -66,11 +66,15 @@ static float  s_segStartHeading     = 0.0f;   // heading at segment start
 static float  s_segTargetHeading    = 0.0f;   // target heading for rotation segments
 static bool   s_segInitialised      = false;
 
-// Heading-turn tolerance (degrees)
-static const float HEADING_TOLERANCE = 0.0f;
+// Live segment error (remaining distance or heading)
+static float  s_segError            = 0.0f;
 
-// Distance tolerance (metres)
-static const float DISTANCE_TOLERANCE = 0.00f;  // 5 cm
+// Last completed segment final error (overshoot = positive for distance)
+static float  s_lastSegError        = 0.0f;
+
+// Settling state — robot pauses between segments so encoders/distance settle
+static bool     s_settling          = false;
+static uint32_t s_settleStart       = 0;
 
 // ── helpers ──────────────────────────────────
 
@@ -94,6 +98,9 @@ bool autonomousStartTrack(const char* trackStr) {
     s_currentSeg = 0;
     s_running    = false;
     s_segInitialised = false;
+    s_settling   = false;
+    s_segError   = 0.0f;
+    s_lastSegError = 0.0f;
 
     if (!trackStr || trackStr[0] == '\0') return false;
 
@@ -145,21 +152,23 @@ bool autonomousStartTrack(const char* trackStr) {
     if (s_trackLen == 0) return false;
 
     // Print parsed track
+    Serial.println("──────────────────────────────────");
     Serial.println("[AUTO] Track loaded:");
     for (int i = 0; i < s_trackLen; i++) {
         const TrackSegment& s = s_track[i];
         switch (s.type) {
-            case SEG_FORWARD:  Serial.printf("  %d: FWD  %.2f m\n",  i, s.value); break;
-            case SEG_BACKWARD: Serial.printf("  %d: BACK %.2f m\n",  i, s.value); break;
+            case SEG_FORWARD:  Serial.printf("  %d: FWD   %.2f m\n",   i, s.value); break;
+            case SEG_BACKWARD: Serial.printf("  %d: BACK  %.2f m\n",   i, s.value); break;
             case SEG_ROTATE_R: Serial.printf("  %d: ROT_R %.1f deg\n", i, s.value); break;
             case SEG_ROTATE_L: Serial.printf("  %d: ROT_L %.1f deg\n", i, s.value); break;
             case SEG_STOP:     Serial.printf("  %d: STOP\n", i); break;
         }
     }
+    Serial.println("──────────────────────────────────");
 
     s_running        = true;
     s_segInitialised = false;
-    Serial.println("[AUTO] Track started.");
+    Serial.println("[AUTO] Track STARTED");
     return true;
 }
 
@@ -170,16 +179,37 @@ void autonomousInit() {
     s_trackLen   = 0;
     s_currentSeg = 0;
     s_segInitialised = false;
+    s_settling   = false;
+    s_segError   = 0.0f;
+    s_lastSegError = 0.0f;
     measuredDistanceInit();
 }
 
 void autonomousUpdate(float currentHeading, float currentDist_m) {
     if (!s_running) return;
+
+    // ── Settling phase: robot is stopped between segments ────────
+    if (s_settling) {
+        data = 0;  // keep motors off
+        if ((millis() - s_settleStart) >= SEGMENT_SETTLE_MS) {
+            s_settling = false;
+            // Log the final settled distance for the just-completed segment
+            Serial.printf("[AUTO] Settle done. Total dist: %.3f m\n", currentDist_m);
+
+            if (s_currentSeg >= s_trackLen) {
+                s_running = false;
+                Serial.println("[AUTO] ═══ Track COMPLETE ═══");
+                return;
+            }
+        } else {
+            return;  // still settling, do nothing
+        }
+    }
+
     if (s_currentSeg >= s_trackLen) {
-        // Track finished
         data = 0;
         s_running = false;
-        Serial.println("[AUTO] Track complete.");
+        Serial.println("[AUTO] ═══ Track COMPLETE ═══");
         return;
     }
 
@@ -192,58 +222,69 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
 
         switch (seg.type) {
             case SEG_FORWARD:
-                Serial.printf("[AUTO] Seg %d: Forward %.2f m\n", s_currentSeg, seg.value);
+                Serial.printf("[AUTO] ▶ Seg %d/%d: Forward %.2f m  (start dist: %.3f m)\n",
+                              s_currentSeg + 1, s_trackLen, seg.value, currentDist_m);
                 data = 1;
                 break;
             case SEG_BACKWARD:
-                Serial.printf("[AUTO] Seg %d: Backward %.2f m\n", s_currentSeg, seg.value);
+                Serial.printf("[AUTO] ▶ Seg %d/%d: Backward %.2f m  (start dist: %.3f m)\n",
+                              s_currentSeg + 1, s_trackLen, seg.value, currentDist_m);
                 data = 2;
                 break;
             case SEG_ROTATE_R:
                 s_segTargetHeading = normaliseHeading(currentHeading + seg.value);
-                Serial.printf("[AUTO] Seg %d: Rotate R %.1f° (target %.1f°)\n",
-                              s_currentSeg, seg.value, s_segTargetHeading);
-                // Use turn-right command range (11-20)
+                Serial.printf("[AUTO] ▶ Seg %d/%d: Rotate R %.1f° → target %.1f°  (current: %.1f°)\n",
+                              s_currentSeg + 1, s_trackLen, seg.value,
+                              s_segTargetHeading, currentHeading);
                 data = 11;
                 break;
             case SEG_ROTATE_L:
                 s_segTargetHeading = normaliseHeading(currentHeading - seg.value);
-                Serial.printf("[AUTO] Seg %d: Rotate L %.1f° (target %.1f°)\n",
-                              s_currentSeg, seg.value, s_segTargetHeading);
-                // Use turn-left command range (21-30)
+                Serial.printf("[AUTO] ▶ Seg %d/%d: Rotate L %.1f° → target %.1f°  (current: %.1f°)\n",
+                              s_currentSeg + 1, s_trackLen, seg.value,
+                              s_segTargetHeading, currentHeading);
                 data = 21;
                 break;
             case SEG_STOP:
-                Serial.println("[AUTO] Seg: STOP");
+                Serial.println("[AUTO] ■ STOP segment reached");
                 data = 0;
                 s_running = false;
-                Serial.println("[AUTO] Track complete.");
+                Serial.println("[AUTO] ═══ Track COMPLETE ═══");
                 return;
         }
         s_segInitialised = true;
     }
 
-    // ── Check if segment is complete ─────────────────
+    // ── Compute live error ───────────────────────────
     bool complete = false;
 
     switch (seg.type) {
         case SEG_FORWARD:
         case SEG_BACKWARD: {
             float travelled = currentDist_m - s_segStartDist_m;
-            if (travelled >= (seg.value - DISTANCE_TOLERANCE)) {
+            float remaining = seg.value - travelled;
+            s_segError = remaining;   // positive = still to go, negative = overshoot
+
+            // Complete when we have covered the FULL target distance (no tolerance)
+            if (travelled >= seg.value) {
+                float overshoot = travelled - seg.value;
+                s_lastSegError = overshoot;
                 complete = true;
-                Serial.printf("[AUTO] Seg %d done — travelled %.3f m\n",
-                              s_currentSeg, travelled);
+                Serial.printf("[AUTO] ✓ Seg %d done | target: %.3f m | actual: %.3f m | error: %+.3f m\n",
+                              s_currentSeg + 1, seg.value, travelled, overshoot);
             }
             break;
         }
         case SEG_ROTATE_R:
         case SEG_ROTATE_L: {
-            float remaining = fabsf(headingDiff(currentHeading, s_segTargetHeading));
-            if (remaining <= HEADING_TOLERANCE) {
+            float remaining = headingDiff(currentHeading, s_segTargetHeading);
+            s_segError = remaining;
+
+            if (fabsf(remaining) <= HEADING_TOLERANCE_DEG) {
+                s_lastSegError = remaining;
                 complete = true;
-                Serial.printf("[AUTO] Seg %d done — heading %.1f° (target %.1f°)\n",
-                              s_currentSeg, currentHeading, s_segTargetHeading);
+                Serial.printf("[AUTO] ✓ Seg %d done | heading: %.1f° | target: %.1f° | error: %+.1f°\n",
+                              s_currentSeg + 1, currentHeading, s_segTargetHeading, remaining);
             }
             break;
         }
@@ -253,29 +294,44 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
     }
 
     if (complete) {
-        // Brief stop between segments to settle
+        // Stop motors and enter settling phase
         data = 0;
+        s_segError = 0.0f;
 
         s_currentSeg++;
         s_segInitialised = false;
 
-        if (s_currentSeg >= s_trackLen) {
-            s_running = false;
-            Serial.println("[AUTO] Track complete.");
-        }
+        // Enter settling phase — wait for robot to physically stop
+        s_settling    = true;
+        s_settleStart = millis();
+        Serial.printf("[AUTO] Settling %d ms before next segment...\n", SEGMENT_SETTLE_MS);
     }
 }
 
 void autonomousAbort() {
-    s_running = false;
+    s_running  = false;
+    s_settling = false;
     data = 0;
-    Serial.println("[AUTO] Aborted.");
+    s_segError = 0.0f;
+    Serial.println("[AUTO] ✕ ABORTED");
 }
 
 bool autonomousIsRunning() {
-    return s_running;
+    return s_running || s_settling;
 }
 
 int autonomousCurrentSegment() {
     return s_currentSeg;
+}
+
+int autonomousTotalSegments() {
+    return s_trackLen;
+}
+
+float autonomousGetSegmentError() {
+    return s_segError;
+}
+
+float autonomousGetLastSegError() {
+    return s_lastSegError;
 }

@@ -50,6 +50,12 @@ void measuredDistanceReset();
 /** Maximum segments in a single track program. */
 #define MAX_TRACK_SEGMENTS 32
 
+/** Settling time between segments (ms) — lets robot fully stop & distance stabilise */
+#define SEGMENT_SETTLE_MS  500
+
+/** Heading tolerance for rotation segments (degrees) */
+#define HEADING_TOLERANCE_DEG  2.0f
+
 enum SegmentType : uint8_t {
     SEG_FORWARD,     // drive forward  N metres
     SEG_BACKWARD,    // drive backward N metres
@@ -67,7 +73,7 @@ struct TrackSegment {
 void autonomousInit();
 
 /**
- * Call every loop iteration AFTER motion() and distance updates.
+ * Call every loop iteration BEFORE motion().
  * When a track is active this function overrides `data` to drive the robot.
  *
  * @param currentHeading  latest heading in degrees (0-360)
@@ -90,5 +96,23 @@ bool autonomousIsRunning();
 
 /** Returns the index of the segment currently being executed (0-based). */
 int  autonomousCurrentSegment();
+
+/** Returns total number of segments in the loaded track. */
+int  autonomousTotalSegments();
+
+/**
+ * Returns the live error for the current segment:
+ *   - For F/B segments: remaining distance in metres (positive = still to go)
+ *   - For R/L segments: remaining angle in degrees
+ *   - 0 if no track is running
+ */
+float autonomousGetSegmentError();
+
+/**
+ * Returns the final error of the LAST completed segment:
+ *   - For F/B: actual distance − target distance (positive = overshoot)
+ *   - For R/L: actual heading error at completion
+ */
+float autonomousGetLastSegError();
 
 #endif // AUTONOMOUS_H
