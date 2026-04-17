@@ -10,6 +10,7 @@
 #include <i2c_driver_wire.h>
 #include <Wire.h>
 #include "distance.h"
+#include "autonomous.h"
 
 int SLAVE_ADDRESS = 0x72;
 
@@ -96,6 +97,12 @@ int  data = 0;
 int rpmAlter_T = 0;
 int rpmAlter = 0;
 int _dirData = 0;
+// Factor to adjust reported/printed RPM to match tachometer readings
+float adjustingfactor = 1.0;
+float adjustingfactor_L = 0.98;
+float adjustingfactor_R = 0.995;
+float adjustingfactor_back_L = 0.97;
+float adjustingfactor_back_R = 1.005;
 
 //Time Variable
 float timeConstant = 100; 
@@ -212,6 +219,9 @@ void setup() {
   // Distance module init
   distanceInit();
 
+  // Autonomous module init
+  autonomousInit();
+
   Serial5.write(0);
   Serial5.write(192);
   /*
@@ -318,32 +328,65 @@ void loop() {
         }
 
         if(_data == char('m')) {
-          Serial.print(getTeensySerial());
-          Serial.print(" | ");
-          Serial.println("Motion Module");
-          data = 0;
-        } else if(_data == char('s')) {
-          systemCounter = true;
-          printAlter = false; //TODO: Can be Removed for fast testing
-          data = 0;//TODO: Can be Removed for fast testing
-          printSetting();
-        } else if(_data == char('p')) {
-          printAlter =  !printAlter;
-        } else if(_data == char('a')) {
-          if (data != '3' || data != '4' || data != '0') {
-              rpmAlter = !rpmAlter; 
-        } } else if(_data == char('b')) {
-          if (data != '1' || data != '2' || data != '0') {
-              rpmAlter_T = !rpmAlter_T; 
-        } } else if(_data != 10) {
-          data = _data;
-          if(_data == data && elaspedTimeControlCounter < timeConstantControlCounter) {
-            startTimeControlCounter = currentTimeControlCounter;
-          } else {
-            data = _data;
-            startTimeControlCounter = currentTimeControlCounter;
-          }
-        }
+           Serial.print(getTeensySerial());
+           Serial.print(" | ");
+           Serial.println("Motion Module");
+           data = 0;
+         } else if(_data == char('T') || _data == char('t')) {
+           // ── Track-line command: read until newline ──
+           // e.g.  T:F20,R90,F10,R90,S
+           // We already consumed 'T', now look for ':' then the payload
+           char trackBuf[256];
+           int  trackIdx = 0;
+           bool gotColon = false;
+           unsigned long tStart = millis();
+           while ((millis() - tStart) < 500) {
+             if (Serial.available()) {
+               char c = Serial.read();
+               if (!gotColon) {
+                 if (c == ':') gotColon = true;
+                 continue;
+               }
+               if (c == '\n' || c == '\r') break;
+               if (trackIdx < (int)sizeof(trackBuf) - 1)
+                 trackBuf[trackIdx++] = c;
+             }
+           }
+           trackBuf[trackIdx] = '\0';
+           if (trackIdx > 0) {
+             autonomousStartTrack(trackBuf);
+           } else {
+             Serial.println("[AUTO] Empty track string.");
+           }
+         } else if(_data == char('X') || _data == char('x')) {
+           // Abort autonomous track
+           autonomousAbort();
+         } else if(_data == char('s')) {
+           systemCounter = true;
+           printAlter = false; //TODO: Can be Removed for fast testing
+           data = 0;//TODO: Can be Removed for fast testing
+           printSetting();
+         } else if(_data == char('p')) {
+           printAlter =  !printAlter;
+         } else if(_data == char('a')) {
+           if (data != '3' || data != '4' || data != '0') {
+               rpmAlter = !rpmAlter; 
+         } } else if(_data == char('b')) {
+           if (data != '1' || data != '2' || data != '0') {
+               rpmAlter_T = !rpmAlter_T; 
+         } } else if(_data != 10) {
+           // Manual command — abort any running autonomous track
+           if (autonomousIsRunning()) {
+             autonomousAbort();
+           }
+           data = _data;
+           if(_data == data && elaspedTimeControlCounter < timeConstantControlCounter) {
+             startTimeControlCounter = currentTimeControlCounter;
+           } else {
+             data = _data;
+             startTimeControlCounter = currentTimeControlCounter;
+           }
+         }
       }
     } else {
       String _data = Serial.readString();
@@ -397,7 +440,14 @@ void loop() {
     data = 0;
   } else {
     updateLatestHeadingFromBno();
+
+    // Update autonomous state machine (may override 'data')
+    autonomousUpdate(latestSerialHeading, distanceGetTotal_m());
+
     motion(data);
+
+    // Update measured distance tracker
+    measuredDistanceUpdate(data, distanceGetTotal_m());
   } 
   
   if (elaspedTime > timeConstant) {
@@ -422,17 +472,30 @@ void loop() {
       //Serial.print(" | ");
       //Serial.print(rpmAlter_T);
       //Serial.print(" | ");
+      // apply adjustment only to reported/printed RPMs (do not modify raw averages)
+      bool isReverseCmd = (data == 2);
+      float sideFactor_L = isReverseCmd ? adjustingfactor_back_L : adjustingfactor_L;
+      float sideFactor_R = isReverseCmd ? adjustingfactor_back_R : adjustingfactor_R;
+
+      float reportedRPM_L = avgRPM_L * adjustingfactor * sideFactor_L;
+      float reportedRPM_R = avgRPM_R * adjustingfactor * sideFactor_R;
+
       Serial.printf(
-        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f | Dist:%6.3f\n",
+        "%d | %6.2f | %6.2f | H:%6.1f | T:%6.1f | E:%6.2f | C:%7.3f | Dist:%6.3f | MDist:%6.3f",
         data,
-      avgRPM_L,
-      avgRPM_R,
+      reportedRPM_L,
+      reportedRPM_R,
       latestSerialHeading,
       debug_targetHeading,
       debug_error,
       debug_correction
       , distanceGetTotal_m()
+      , measuredDistanceGet_m()
       );
+      if (autonomousIsRunning()) {
+        Serial.printf(" | [SEG %d]", autonomousCurrentSegment());
+      }
+      Serial.println();
       /*Serial.print(" | ");
       Serial.print((s.calib_stat >> 6) & 3);
       Serial.print(" | ");
