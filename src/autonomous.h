@@ -91,4 +91,16 @@ bool autonomousIsRunning();
 /** Returns the index of the segment currently being executed (0-based). */
 int  autonomousCurrentSegment();
 
+/** Toggle pause: if running → pause, if paused → resume. Supports multiple pauses. */
+void autonomousTogglePause();
+
+/** Pause the autonomous track — stops motors, preserves all state & distance. */
+void autonomousPause();
+
+/** Resume a paused autonomous track from exactly where it left off. */
+void autonomousResume();
+
+/** Returns true if the autonomous system is currently paused. */
+bool autonomousIsPaused();
+
 #endif // AUTONOMOUS_H

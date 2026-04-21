@@ -13,12 +13,14 @@ extern float latestSerialHeading;   // from main.cpp
 
 static float  s_measuredDist_m     = 0.0f;   // accumulated since last reset
 static float  s_measuredBaseline_m = 0.0f;   // distanceGetTotal_m() at reset
+static float  s_pausePreservedDist = 0.0f;   // distance saved across pauses
 static bool   s_wasStopped         = true;    // was the robot stopped (cmd 0)?
 static int    s_prevCmd            = 0;
 
 void measuredDistanceInit() {
     s_measuredDist_m     = 0.0f;
     s_measuredBaseline_m = 0.0f;
+    s_pausePreservedDist = 0.0f;
     s_wasStopped         = true;
     s_prevCmd            = 0;
 }
@@ -30,11 +32,11 @@ void measuredDistanceUpdate(int currentCmd, float fusedDist_m) {
     if (isMoving && s_wasStopped) {
         // New movement segment — reset baseline
         s_measuredBaseline_m = fusedDist_m;
-        s_measuredDist_m     = 0.0f;
+        s_measuredDist_m     = s_pausePreservedDist;  // carry over paused distance
     }
 
     if (isMoving) {
-        s_measuredDist_m = fusedDist_m - s_measuredBaseline_m;
+        s_measuredDist_m = s_pausePreservedDist + (fusedDist_m - s_measuredBaseline_m);
     }
 
     // Track stopped state
@@ -74,12 +76,18 @@ static bool   s_settling            = false;
 static unsigned long s_settleStart  = 0;
 static const unsigned long SETTLE_TIME_MS = 150;  // ms to pause between segments
 
+// Pause state: freeze autonomous execution and preserve all data
+static bool   s_paused              = false;
+static int    s_pausedCmd           = 0;       // motor command active before pause
+static float  s_pauseSegDist_m      = 0.0f;    // segment dist already covered before pause
+static float  s_pauseSegAccumAngle  = 0.0f;    // rotation accumulated before pause
+
 // Heading-turn tolerance (degrees)
-static const float HEADING_TOLERANCE = 1.5f;
+static const float HEADING_TOLERANCE = 0.1f;
 
 // Rotation braking compensation (degrees)
 // Stop command is issued slightly early to account for inertial turn overshoot.
-static const float ROT_BRAKING_OVERSHOOT_DEG = 2.0f;
+static const float ROT_BRAKING_OVERSHOOT_DEG = 3.0f;
 
 // Distance braking compensation (metres)
 // The robot overshoots slightly after motors stop due to inertia.
@@ -190,6 +198,7 @@ bool autonomousStartTrack(const char* trackStr) {
 
 void autonomousInit() {
     s_running    = false;
+    s_paused     = false;
     s_trackLen   = 0;
     s_currentSeg = 0;
     s_segInitialised = false;
@@ -198,7 +207,7 @@ void autonomousInit() {
 }
 
 void autonomousUpdate(float currentHeading, float currentDist_m) {
-    if (!s_running) return;
+    if (!s_running || s_paused) return;
     if (s_currentSeg >= s_trackLen) {
         // Track finished
         data = 0;
@@ -333,6 +342,7 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
 
 void autonomousAbort() {
     s_running = false;
+    s_paused  = false;
     data = 0;
     Serial.println("[AUTO] Aborted.");
 }
@@ -343,4 +353,58 @@ bool autonomousIsRunning() {
 
 int autonomousCurrentSegment() {
     return s_currentSeg;
+}
+
+// ── Pause / Resume ───────────────────────────
+
+void autonomousPause() {
+    if (!s_running || s_paused) return;
+
+    s_paused    = true;
+    s_pausedCmd = data;      // remember what we were doing
+
+    // Snapshot progress so we can rebase on resume
+    TrackSegment& seg = s_track[s_currentSeg];
+    if (seg.type == SEG_FORWARD || seg.type == SEG_BACKWARD) {
+        // distance already covered in this segment
+        s_pauseSegDist_m = distanceGetTotal_m() - s_segStartDist_m;
+    }
+    if (seg.type == SEG_ROTATE_R || seg.type == SEG_ROTATE_L) {
+        s_pauseSegAccumAngle = s_segAccumAngle;
+    }
+
+    data = 0;                // stop motors
+    Serial.println("[AUTO] Paused.");
+}
+
+void autonomousResume() {
+    if (!s_running || !s_paused) return;
+
+    // Rebase segment start so remaining distance is correct
+    TrackSegment& seg = s_track[s_currentSeg];
+    if (seg.type == SEG_FORWARD || seg.type == SEG_BACKWARD) {
+        // New baseline = current total dist minus what we already covered
+        s_segStartDist_m = distanceGetTotal_m() - s_pauseSegDist_m;
+    }
+    if (seg.type == SEG_ROTATE_R || seg.type == SEG_ROTATE_L) {
+        // Restore accumulated angle and reset heading tracker to current
+        s_segAccumAngle  = s_pauseSegAccumAngle;
+        s_segPrevHeading = latestSerialHeading;  // avoid delta jump
+    }
+
+    data      = s_pausedCmd; // restore motor command
+    s_paused  = false;
+    Serial.printf("[AUTO] Resumed (cmd=%d).\n", data);
+}
+
+void autonomousTogglePause() {
+    if (s_paused) {
+        autonomousResume();
+    } else {
+        autonomousPause();
+    }
+}
+
+bool autonomousIsPaused() {
+    return s_paused;
 }

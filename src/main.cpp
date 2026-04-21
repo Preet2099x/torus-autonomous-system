@@ -369,6 +369,11 @@ void loop() {
          } else if(_data == 'X' || _data == 'x') {
            autonomousAbort();
            cmdBufIdx = 0;
+         } else if(_data == 'q' || _data == 'Q') {
+           if (autonomousIsRunning()) {
+             autonomousTogglePause();
+           }
+           cmdBufIdx = 0;
          } else if(_data == 's') {
            systemCounter = true;
            printAlter = false;
