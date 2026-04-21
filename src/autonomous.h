@@ -37,6 +37,8 @@ void measuredDistanceReset();
 //    B<metres>   — drive Backward the given distance
 //    R<degrees>  — Rotate right (clockwise) by degrees
 //    L<degrees>  — rotate Left  (counter-clockwise) by degrees
+//    RC          — continuous Right circle (keeps running)
+//    LC          — continuous Left  circle (keeps running)
 //    S           — Stop (end of track)
 //
 //  Example: "T:F20,R90,F10,R90,S"
@@ -55,6 +57,8 @@ enum SegmentType : uint8_t {
     SEG_BACKWARD,    // drive backward N metres
     SEG_ROTATE_R,    // rotate right (CW)  N degrees
     SEG_ROTATE_L,    // rotate left  (CCW) N degrees
+    SEG_CIRCLE_R,    // continuous right circle (manual stop)
+    SEG_CIRCLE_L,    // continuous left  circle (manual stop)
     SEG_STOP         // end of track
 };
 

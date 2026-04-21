@@ -87,8 +87,7 @@ static const float HEADING_TOLERANCE = 0.1f;
 
 // Rotation braking compensation (degrees)
 // Stop command is issued slightly early to account for inertial turn overshoot.
-static const float ROT_BRAKING_OVERSHOOT_DEG = 3.0f;
-
+static const float ROT_BRAKING_OVERSHOOT_DEG = 3.55f;
 // Distance braking compensation (metres)
 // The robot overshoots slightly after motors stop due to inertia.
 // This value is subtracted from the target so the robot hits the exact mark.
@@ -138,9 +137,23 @@ bool autonomousStartTrack(const char* trackStr) {
         // Skip leading whitespace
         while (*token == ' ') token++;
 
+        // Trim trailing whitespace
+        size_t tokenLen = strlen(token);
+        while (tokenLen > 0 && (token[tokenLen - 1] == ' ' || token[tokenLen - 1] == '\t')) {
+            token[--tokenLen] = '\0';
+        }
+
         TrackSegment seg;
         seg.value = 0.0f;
 
+        // Special continuous circle commands: RC / LC
+        // Reversed mapping by request:
+        //   RC -> left-circle path, LC -> right-circle path
+        if ((toupper(token[0]) == 'R') && (toupper(token[1]) == 'C') && token[2] == '\0') {
+            seg.type = SEG_CIRCLE_L;
+        } else if ((toupper(token[0]) == 'L') && (toupper(token[1]) == 'C') && token[2] == '\0') {
+            seg.type = SEG_CIRCLE_R;
+        } else {
         char code = toupper(token[0]);
         switch (code) {
             case 'F':
@@ -152,10 +165,18 @@ bool autonomousStartTrack(const char* trackStr) {
                 seg.value = atof(token + 1);
                 break;
             case 'R':
+                if (token[1] == '\0') {
+                    Serial.println("[AUTO] Invalid token 'R' (use R<deg> or RC).");
+                    return false;
+                }
                 seg.type  = SEG_ROTATE_R;
                 seg.value = atof(token + 1);
                 break;
             case 'L':
+                if (token[1] == '\0') {
+                    Serial.println("[AUTO] Invalid token 'L' (use L<deg> or LC).");
+                    return false;
+                }
                 seg.type  = SEG_ROTATE_L;
                 seg.value = atof(token + 1);
                 break;
@@ -166,6 +187,7 @@ bool autonomousStartTrack(const char* trackStr) {
             default:
                 Serial.printf("[AUTO] Unknown segment code '%c'\n", code);
                 return false;
+        }
         }
 
         s_track[s_trackLen++] = seg;
@@ -183,6 +205,8 @@ bool autonomousStartTrack(const char* trackStr) {
             case SEG_BACKWARD: Serial.printf("  %d: BACK %.2f m\n",  i, s.value); break;
             case SEG_ROTATE_R: Serial.printf("  %d: ROT_R %.1f deg\n", i, s.value); break;
             case SEG_ROTATE_L: Serial.printf("  %d: ROT_L %.1f deg\n", i, s.value); break;
+            case SEG_CIRCLE_R: Serial.printf("  %d: CIRCLE_R (continuous)\n", i); break;
+            case SEG_CIRCLE_L: Serial.printf("  %d: CIRCLE_L (continuous)\n", i); break;
             case SEG_STOP:     Serial.printf("  %d: STOP\n", i); break;
         }
     }
@@ -251,6 +275,14 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
                 Serial.printf("[AUTO] Seg %d: Rotate L %.1f° (start %.1f° → target %.1f°)\n",
                               s_currentSeg, seg.value, currentHeading, s_segTargetHeading);
                 data = 21;
+                break;
+            case SEG_CIRCLE_R:
+                Serial.printf("[AUTO] Seg %d: Right circle (continuous)\n", s_currentSeg);
+                data = 121;
+                break;
+            case SEG_CIRCLE_L:
+                Serial.printf("[AUTO] Seg %d: Left circle (continuous)\n", s_currentSeg);
+                data = 111;
                 break;
             case SEG_STOP:
                 Serial.println("[AUTO] Seg: STOP");
@@ -327,6 +359,12 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
             }
             break;
         }
+        case SEG_CIRCLE_R:
+            data = 121;
+            break;
+        case SEG_CIRCLE_L:
+            data = 111;
+            break;
         case SEG_STOP:
             complete = true;
             break;
