@@ -257,6 +257,7 @@ void loop() {
   static uint8_t emergencyHighCount = 0;
   static uint8_t emergencyLowCount = 0;
   static bool emergencyLatched = false;
+  static bool softwareEmergencyLatched = false;
   
   //Handle  Time
   currentTime = millis(); 
@@ -367,7 +368,23 @@ void loop() {
            }
            cmdBufIdx = 0;
          } else if(_data == 'X' || _data == 'x') {
-           autonomousAbort();
+           if (!softwareEmergencyLatched) {
+             softwareEmergencyLatched = true;
+             autonomousAbort();
+             data = 0;
+             Serial.println("[EMG] Software emergency latched (x). Press x again to clear.");
+           } else {
+             softwareEmergencyLatched = false;
+             Serial.println("[EMG] Software emergency cleared.");
+           }
+           cmdBufIdx = 0;
+         } else if(_data == 'Q' || _data == 'q') {
+           if (autonomousIsRunning()) {
+             autonomousTogglePaused();
+           } else {
+             data = 0;
+             Serial.println("[AUTO] No active track to pause/resume; robot stopped.");
+           }
            cmdBufIdx = 0;
          } else if(_data == 's') {
            systemCounter = true;
@@ -459,7 +476,7 @@ void loop() {
     }
   }
 
-  if(emergencyLatched) { 
+  if(emergencyLatched || softwareEmergencyLatched) { 
     rpmAlter = false;
     //Serial5.write(0);
     //Serial5.write(128);
@@ -524,6 +541,13 @@ void loop() {
       );
       if (autonomousIsRunning()) {
         Serial.printf(" | [SEG %d]", autonomousCurrentSegment());
+        if (autonomousIsPaused()) {
+          Serial.print(" [PAUSED]");
+        }
+        float autoCum = autonomousLinearCumulative_m();
+        if (autoCum > 0.0f) {
+          Serial.printf(" | ACum:%6.3f", autoCum);
+        }
       }
       Serial.println();
       /*Serial.print(" | ");

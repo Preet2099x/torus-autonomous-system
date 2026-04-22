@@ -99,10 +99,10 @@ float debug_serialHeading = 0;
 float debug_correction = 0;
 
 void motion(int _data) {
-  // If the command is not 1 or 2, drop the stored target heading immediately
-  // so steering doesn't chase a stale target even if the same non-1/2
+  // If the command is not a linear drive mode, drop the stored target heading immediately
+  // so steering doesn't chase a stale target even if the same non-linear
   // command is repeatedly received.
-  if (_data != 1 && _data != 2) {
+  if (_data != 1 && _data != 2 && _data != 31 && _data != 32) {
     targetHeading = latestSerialHeading;
     integral = 0;
     prevError = 0;
@@ -142,11 +142,11 @@ void motion(int _data) {
     analogWrite(pwmPin_R, 0);
 
   }  
-  //Forward cmd
-else if (_data == 1) {
+  //Forward cmd (31 = low-speed approach)
+else if (_data == 1 || _data == 31) {
     rpmAlter_T = false;
     
-    if(_data == 1 && lastCommand != 1&& lastCommand == 0  ) {
+    if((_data == 1 || _data == 31) && (lastCommand != 1 && lastCommand != 31) && lastCommand == 0  ) {
         targetHeading = latestSerialHeading;
         integral = 0;
         prevError = 0;
@@ -193,8 +193,8 @@ else if (_data == 1) {
       correction = (correction >= 0.0f) ? 1.0f : -1.0f;
     }
 
-    int baseRight = 237;
-    int baseLeft  = 242;
+    int baseRight = (_data == 31) ? 205 : 237;
+    int baseLeft  = (_data == 31) ? 210 : 242;
 
     int steeringStep = (int)(correction * 2.0f);
     int pwmR = baseRight - steeringStep;
@@ -206,10 +206,11 @@ else if (_data == 1) {
     writeRampedMotor(LOW, LOW, pwmL, pwmR);
 
   }
-  else if (_data == 2) {
+  //Backward cmd (32 = low-speed approach)
+  else if (_data == 2 || _data == 32) {
       rpmAlter_T = false;
 
-      if(_data == 2 && lastCommand != 2) {
+        if((_data == 2 || _data == 32) && (lastCommand != 2 && lastCommand != 32)) {
           targetHeading = latestSerialHeading;
           integral = 0;
           prevError = 0;
@@ -242,8 +243,8 @@ else if (_data == 1) {
 
       correction = constrain(correction, -55, 55);
 
-      int baseRight = 247;
-      int baseLeft  = 239;
+      int baseRight = (_data == 32) ? 212 : 247;
+      int baseLeft  = (_data == 32) ? 206 : 239;
 
       // reverse steering for backward motion
       int steeringStep = (int)roundf(correction * 6.0f);

@@ -85,10 +85,22 @@ bool autonomousStartTrack(const char* trackStr);
 /** Abort the current autonomous track immediately. */
 void autonomousAbort();
 
+/** Pause/resume the current autonomous track while preserving segment state. */
+void autonomousSetPaused(bool paused);
+
+/** Toggle pause state for an active autonomous track. */
+void autonomousTogglePaused();
+
+/** Returns true if an autonomous track is currently paused. */
+bool autonomousIsPaused();
+
 /** Returns true if the autonomous system is currently running a track. */
 bool autonomousIsRunning();
 
 /** Returns the index of the segment currently being executed (0-based). */
 int  autonomousCurrentSegment();
+
+/** Returns cumulative measured distance within the active F/B segment (metres). */
+float autonomousLinearCumulative_m();
 
 #endif // AUTONOMOUS_H
