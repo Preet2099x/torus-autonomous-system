@@ -9,6 +9,9 @@ static const uint8_t BNO_ADDR       = 0x28;
 static const uint8_t LIA_X_LSB      = 0x28;   // forward axis  ← change to 0x2A (Y)
                                                // or 0x2C (Z) if your BNO is mounted
                                                // differently. Drive fwd and check sign.
+static const uint8_t GYR_X_LSB      = 0x14;
+static const uint8_t GYR_Y_LSB      = 0x16;
+static const uint8_t GYR_Z_LSB      = 0x18;
 
 // ─────────────────────────────────────────────
 //  Pre-computed: effective ticks per WHEEL revolution
@@ -29,6 +32,14 @@ static float s_encoderDist_m   = 0.0f;
 static float s_accelDist_m     = 0.0f;
 static float s_velocity_ms     = 0.0f;
 static float s_accelVel_ms     = 0.0f;   // integrated accel velocity
+static bool  s_motionTrusted   = true;
+static uint8_t s_noImuEvidenceCount = 0;
+
+static const float MIN_ENC_VEL_FOR_TRUST_CHECK = 0.06f;  // m/s
+static const float MIN_IMU_VEL_EVIDENCE        = 0.04f;  // m/s (integrated accel velocity)
+static const float MIN_IMU_ACCEL_EVIDENCE      = 0.10f;  // m/s^2
+static const float MIN_GYRO_EVIDENCE_DPS       = 1.2f;   // deg/s
+static const uint8_t NO_IMU_EVIDENCE_LIMIT     = 6;      // consecutive updates
 
 // ─────────────────────────────────────────────
 //  Helpers
@@ -48,6 +59,13 @@ static int16_t bnoRead16(uint8_t reg) {
 static float readLIA_ms2() {
     float a = (float)bnoRead16(LIA_X_LSB) / BNO_LIA_SCALE;
     return (fabsf(a) < ACCEL_DEADBAND) ? 0.0f : a;
+}
+
+static float readGyroMagnitude_dps() {
+    float gx = (float)bnoRead16(GYR_X_LSB) / 16.0f;
+    float gy = (float)bnoRead16(GYR_Y_LSB) / 16.0f;
+    float gz = (float)bnoRead16(GYR_Z_LSB) / 16.0f;
+    return sqrtf(gx * gx + gy * gy + gz * gz);
 }
 
 /**
@@ -72,7 +90,7 @@ void distanceInit() {
     distanceReset();
 }
 
-void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s) {
+void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s, int motionCmd) {
     if (dt_s <= 0.0f) return;
 
     // ── 1. Encoder distance this interval ─────────────────────────────────
@@ -91,6 +109,7 @@ void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s) {
     // Integrate once → velocity, use velocity × dt → distance.
     //
     float accel = readLIA_ms2();
+    float gyroMag_dps = readGyroMagnitude_dps();
     s_accelVel_ms += accel * dt_s;
 
     // Velocity reset guard: if encoder says stopped AND accel is quiet,
@@ -110,12 +129,32 @@ void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s) {
     // At α=0.95 the encoder dominates.  The accelerometer's 5% contribution
     // catches brief wheel-slip events where encoder ticks under-count.
     //
-    float fusedDist = COMP_FILTER_ALPHA       * encDist
+    bool linearCmd = (motionCmd == 1 || motionCmd == 2 || motionCmd == 31 || motionCmd == 32);
+    bool imuEvidence = (fabsf(s_accelVel_ms) >= MIN_IMU_VEL_EVIDENCE)
+                    || (fabsf(accel) >= MIN_IMU_ACCEL_EVIDENCE)
+                    || (gyroMag_dps >= MIN_GYRO_EVIDENCE_DPS);
+
+    if (linearCmd && encVel >= MIN_ENC_VEL_FOR_TRUST_CHECK) {
+        if (!imuEvidence) {
+            if (s_noImuEvidenceCount < 255) s_noImuEvidenceCount++;
+        } else {
+            s_noImuEvidenceCount = 0;
+        }
+    } else {
+        s_noImuEvidenceCount = 0;
+    }
+
+    s_motionTrusted = (s_noImuEvidenceCount < NO_IMU_EVIDENCE_LIMIT);
+
+    float trustedEncDist = s_motionTrusted ? encDist : 0.0f;
+    float trustedEncVel  = s_motionTrusted ? encVel  : 0.0f;
+
+    float fusedDist = COMP_FILTER_ALPHA       * trustedEncDist
                     + (1.0f - COMP_FILTER_ALPHA) * accelDist;
 
     s_totalDist_m += fusedDist;
 
-    s_velocity_ms  = COMP_FILTER_ALPHA       * encVel
+    s_velocity_ms  = COMP_FILTER_ALPHA       * trustedEncVel
                    + (1.0f - COMP_FILTER_ALPHA) * fabsf(s_accelVel_ms);
 }
 
@@ -130,4 +169,10 @@ void distanceReset() {
     s_accelDist_m   = 0.0f;
     s_velocity_ms   = 0.0f;
     s_accelVel_ms   = 0.0f;
+    s_motionTrusted = true;
+    s_noImuEvidenceCount = 0;
+}
+
+bool distanceMotionTrusted() {
+    return s_motionTrusted;
 }

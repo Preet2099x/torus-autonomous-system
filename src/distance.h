@@ -52,7 +52,7 @@ void distanceInit();
  * @param encTicks_R  current encoderValue_R
  * @param dt_s        elapsed time in SECONDS  (pass elaspedTime / 1000.0f)
  */
-void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s);
+void distanceUpdate(long encTicks_L, long encTicks_R, float dt_s, int motionCmd);
 
 /** Total fused distance in metres since init / last reset. */
 float distanceGetTotal_m();
@@ -68,5 +68,8 @@ float distanceGetAccel_m();
 
 /** Zero all accumulators — call at the start of a new measurement segment. */
 void distanceReset();
+
+/** True when encoder distance is currently trusted against IMU evidence. */
+bool distanceMotionTrusted();
 
 #endif // DISTANCE_H

@@ -539,11 +539,15 @@ void loop() {
       , distanceGetTotal_m()
       , measuredDistanceGet_m()
       );
+      Serial.printf(" | Mv:%s", distanceMotionTrusted() ? "OK" : "HOLD?");
       if (autonomousIsRunning()) {
         Serial.printf(" | [SEG %d]", autonomousCurrentSegment());
         if (autonomousIsPaused()) {
           Serial.print(" [PAUSED]");
         }
+        Serial.printf(" | STime:%5.2fs | TTime:%6.2fs",
+                      autonomousSegmentActiveTime_s(),
+                      autonomousTrackActiveTime_s());
         float autoCum = autonomousLinearCumulative_m();
         if (autoCum > 0.0f) {
           Serial.printf(" | ACum:%6.3f", autoCum);
@@ -561,7 +565,7 @@ void loop() {
    }
 
   // Update fused distance using encoder ticks for this interval
-  distanceUpdate(encoderValue_L, encoderValue_R, elaspedTime / 1000.0f);
+  distanceUpdate(encoderValue_L, encoderValue_R, elaspedTime / 1000.0f, data);
 
   encoderValue_L = encoderValue_R = 0;
 

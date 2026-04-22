@@ -55,6 +55,8 @@ enum SegmentType : uint8_t {
     SEG_BACKWARD,    // drive backward N metres
     SEG_ROTATE_R,    // rotate right (CW)  N degrees
     SEG_ROTATE_L,    // rotate left  (CCW) N degrees
+    SEG_CIRCLE_R,    // continuous right circle motion
+    SEG_CIRCLE_L,    // continuous left circle motion
     SEG_STOP         // end of track
 };
 
@@ -102,5 +104,11 @@ int  autonomousCurrentSegment();
 
 /** Returns cumulative measured distance within the active F/B segment (metres). */
 float autonomousLinearCumulative_m();
+
+/** Returns active (non-paused) elapsed time for current track in seconds. */
+float autonomousTrackActiveTime_s();
+
+/** Returns active (non-paused) elapsed time for current segment in seconds. */
+float autonomousSegmentActiveTime_s();
 
 #endif // AUTONOMOUS_H

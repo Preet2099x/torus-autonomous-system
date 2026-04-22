@@ -153,6 +153,22 @@ bool autonomousStartTrack(const char* trackStr) {
         TrackSegment seg;
         seg.value = 0.0f;
 
+        // Two-letter circle segments (must be exact RC/LC; plain R/L are rotations)
+        if ((toupper(token[0]) == 'R') && (toupper(token[1]) == 'C') && token[2] == '\0') {
+            seg.type = SEG_CIRCLE_R;
+            seg.value = 0.0f;
+            s_track[s_trackLen++] = seg;
+            token = strtok(NULL, ",");
+            continue;
+        }
+        if ((toupper(token[0]) == 'L') && (toupper(token[1]) == 'C') && token[2] == '\0') {
+            seg.type = SEG_CIRCLE_L;
+            seg.value = 0.0f;
+            s_track[s_trackLen++] = seg;
+            token = strtok(NULL, ",");
+            continue;
+        }
+
         char code = toupper(token[0]);
         switch (code) {
             case 'F':
@@ -195,6 +211,8 @@ bool autonomousStartTrack(const char* trackStr) {
             case SEG_BACKWARD: Serial.printf("  %d: BACK %.2f m\n",  i, s.value); break;
             case SEG_ROTATE_R: Serial.printf("  %d: ROT_R %.1f deg\n", i, s.value); break;
             case SEG_ROTATE_L: Serial.printf("  %d: ROT_L %.1f deg\n", i, s.value); break;
+            case SEG_CIRCLE_R: Serial.printf("  %d: CIRCLE_R (cmd 110-119)\n", i); break;
+            case SEG_CIRCLE_L: Serial.printf("  %d: CIRCLE_L (cmd 120-129)\n", i); break;
             case SEG_STOP:     Serial.printf("  %d: STOP\n", i); break;
         }
     }
@@ -294,6 +312,14 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
                               s_currentSeg, seg.value, currentHeading, s_segTargetHeading);
                 data = 21;
                 break;
+            case SEG_CIRCLE_R:
+                Serial.printf("[AUTO] Seg %d: Circle Right\n", s_currentSeg);
+                data = 111;
+                break;
+            case SEG_CIRCLE_L:
+                Serial.printf("[AUTO] Seg %d: Circle Left\n", s_currentSeg);
+                data = 121;
+                break;
             case SEG_STOP:
                 Serial.println("[AUTO] Seg: STOP");
                 data = 0;
@@ -347,6 +373,12 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
             break;
         case SEG_ROTATE_L:
             data = 21;
+            break;
+        case SEG_CIRCLE_R:
+            data = 111;
+            break;
+        case SEG_CIRCLE_L:
+            data = 121;
             break;
         case SEG_STOP:
             data = 0;
@@ -428,6 +460,11 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
         case SEG_STOP:
             complete = true;
             break;
+        case SEG_CIRCLE_R:
+        case SEG_CIRCLE_L:
+            // Continuous circle segment: runs until abort/emergency/new command.
+            complete = false;
+            break;
     }
 
     if (complete) {
@@ -496,4 +533,38 @@ float autonomousLinearCumulative_m() {
     if (type != SEG_FORWARD && type != SEG_BACKWARD) return 0.0f;
 
     return s_linearCumulative_m + measuredDistanceGet_m();
+}
+
+float autonomousTrackActiveTime_s() {
+    if (s_trackStartMs == 0) return 0.0f;
+
+    unsigned long nowMs = millis();
+    unsigned long totalMs = nowMs - s_trackStartMs;
+    unsigned long pausedMs = s_trackPausedMs;
+
+    if (s_paused) {
+        pausedMs += (nowMs - s_pauseStart);
+    }
+
+    if (totalMs >= pausedMs) totalMs -= pausedMs;
+    else totalMs = 0;
+
+    return totalMs / 1000.0f;
+}
+
+float autonomousSegmentActiveTime_s() {
+    if (!s_running || !s_segInitialised) return 0.0f;
+
+    unsigned long nowMs = millis();
+    unsigned long segMs = nowMs - s_segStartMs;
+    unsigned long pausedMs = s_segPausedMs;
+
+    if (s_paused) {
+        pausedMs += (nowMs - s_pauseStart);
+    }
+
+    if (segMs >= pausedMs) segMs -= pausedMs;
+    else segMs = 0;
+
+    return segMs / 1000.0f;
 }
