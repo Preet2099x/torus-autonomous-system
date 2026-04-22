@@ -71,6 +71,14 @@ static float  s_segAccumAngle       = 0.0f;   // accumulated signed rotation (+ 
 static float  s_segPrevHeading      = 0.0f;   // previous heading for delta tracking
 static bool   s_segInitialised      = false;
 
+// ── Chunked distance reset (improves accuracy over long runs) ────────
+// Every CHUNK_DISTANCE_M metres, the fused distance accumulator is reset
+// and the measured chunk is banked into s_chunkBanked_m.  This prevents
+// encoder/IMU drift from compounding over long segments.
+static const float CHUNK_DISTANCE_M = 1.0f;   // reset interval (metres)
+static float  s_chunkBanked_m       = 0.0f;   // sum of completed 1-m chunks
+static int    s_chunkCount           = 0;       // number of chunks banked
+
 // Settling state: brief pause between segments to let motors/IMU settle
 static bool   s_settling            = false;
 static unsigned long s_settleStart  = 0;
@@ -89,9 +97,14 @@ static const float HEADING_TOLERANCE = 0.1f;
 // Stop command is issued slightly early to account for inertial turn overshoot.
 static const float ROT_BRAKING_OVERSHOOT_DEG = 3.55f;
 // Distance braking compensation (metres)
-// The robot overshoots slightly after motors stop due to inertia.
-// This value is subtracted from the target so the robot hits the exact mark.
-static const float BRAKING_OVERSHOOT_M = 0.02f;
+// Forward and backward have different coasting characteristics,
+// so each gets its own tunable offset.
+// ┌─────────────────────────────────────────────────────────────┐
+// │ Robot stops SHORT  → decrease the value (less early stop)   │
+// │ Robot OVERSHOOTS   → increase the value (more early stop)   │
+// └─────────────────────────────────────────────────────────────┘
+static const float BRAKING_FWD_M = 0.0f;  // forward coast compensation
+static const float BRAKING_BWD_M = -0.04f;  // backward coast compensation
 
 // Deceleration approach distance (metres)
 // When within this distance of target, apply slow speed
@@ -247,13 +260,21 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
         s_segStartDist_m   = currentDist_m;
         s_segStartHeading  = currentHeading;
 
+        // Reset chunked-distance state at the start of every new segment
+        s_chunkBanked_m = 0.0f;
+        s_chunkCount    = 0;
+        distanceReset();                       // zero fused accumulator
+        s_segStartDist_m = distanceGetTotal_m(); // re-read (should be ~0)
+
         switch (seg.type) {
             case SEG_FORWARD:
-                Serial.printf("[AUTO] Seg %d: Forward %.2f m\n", s_currentSeg, seg.value);
+                Serial.printf("[AUTO] Seg %d: Forward %.2f m (chunked @ %.1f m)\n",
+                              s_currentSeg, seg.value, CHUNK_DISTANCE_M);
                 data = 1;
                 break;
             case SEG_BACKWARD:
-                Serial.printf("[AUTO] Seg %d: Backward %.2f m\n", s_currentSeg, seg.value);
+                Serial.printf("[AUTO] Seg %d: Backward %.2f m (chunked @ %.1f m)\n",
+                              s_currentSeg, seg.value, CHUNK_DISTANCE_M);
                 data = 2;
                 break;
             case SEG_ROTATE_R:
@@ -315,15 +336,39 @@ void autonomousUpdate(float currentHeading, float currentDist_m) {
     switch (seg.type) {
         case SEG_FORWARD:
         case SEG_BACKWARD: {
-            float travelled = currentDist_m - s_segStartDist_m;
-            // Effective target accounts for braking overshoot
-            float effectiveTarget = seg.value - BRAKING_OVERSHOOT_M;
+            float chunkDist = currentDist_m - s_segStartDist_m;  // distance since last reset
+            float totalTravelled = s_chunkBanked_m + chunkDist;  // banked + current
+
+            // ── Chunk boundary: bank the current chunk and reset ──
+            if (chunkDist >= CHUNK_DISTANCE_M) {
+                s_chunkCount++;
+                s_chunkBanked_m += chunkDist;
+                Serial.printf("[AUTO] Seg %d chunk #%d: %.3f m  (banked total: %.3f m)\n",
+                              s_currentSeg, s_chunkCount, chunkDist, s_chunkBanked_m);
+
+                // Reset the fused distance accumulator to eliminate compounding drift
+                distanceReset();
+                s_segStartDist_m = distanceGetTotal_m();  // re-read (~0)
+                chunkDist      = 0.0f;
+                totalTravelled = s_chunkBanked_m;         // recalc after reset
+            }
+
+            // Effective target accounts for braking overshoot (direction-specific)
+            float braking = (seg.type == SEG_FORWARD) ? BRAKING_FWD_M : BRAKING_BWD_M;
+            float effectiveTarget = seg.value - braking;
             if (effectiveTarget < 0.0f) effectiveTarget = 0.0f;
 
-            if (travelled >= effectiveTarget) {
+            if (totalTravelled >= effectiveTarget) {
+                // Bank the final remainder as the last chunk
+                float remainder = totalTravelled - s_chunkBanked_m;
+                s_chunkCount++;
+                s_chunkBanked_m = totalTravelled;
+
                 complete = true;
-                Serial.printf("[AUTO] Seg %d done — travelled %.3f m (target %.3f m)\n",
-                              s_currentSeg, travelled, seg.value);
+                Serial.printf("[AUTO] Seg %d chunk #%d (final): %.3f m\n",
+                              s_currentSeg, s_chunkCount, remainder);
+                Serial.printf("[AUTO] Seg %d done — total %.3f m  (%d fresh chunks summed)  (target %.3f m)\n",
+                              s_currentSeg, s_chunkBanked_m, s_chunkCount, seg.value);
             }
             break;
         }
@@ -395,6 +440,9 @@ int autonomousCurrentSegment() {
 
 // ── Pause / Resume ───────────────────────────
 
+static float s_pauseChunkBanked_m   = 0.0f;  // preserve banked chunks across pause
+static int   s_pauseChunkCount      = 0;
+
 void autonomousPause() {
     if (!s_running || s_paused) return;
 
@@ -404,8 +452,10 @@ void autonomousPause() {
     // Snapshot progress so we can rebase on resume
     TrackSegment& seg = s_track[s_currentSeg];
     if (seg.type == SEG_FORWARD || seg.type == SEG_BACKWARD) {
-        // distance already covered in this segment
-        s_pauseSegDist_m = distanceGetTotal_m() - s_segStartDist_m;
+        // distance already covered in this segment (current chunk only)
+        s_pauseSegDist_m      = distanceGetTotal_m() - s_segStartDist_m;
+        s_pauseChunkBanked_m  = s_chunkBanked_m;
+        s_pauseChunkCount     = s_chunkCount;
     }
     if (seg.type == SEG_ROTATE_R || seg.type == SEG_ROTATE_L) {
         s_pauseSegAccumAngle = s_segAccumAngle;
@@ -421,8 +471,13 @@ void autonomousResume() {
     // Rebase segment start so remaining distance is correct
     TrackSegment& seg = s_track[s_currentSeg];
     if (seg.type == SEG_FORWARD || seg.type == SEG_BACKWARD) {
+        // Reset fused accumulator on resume so drift doesn't carry over
+        distanceReset();
         // New baseline = current total dist minus what we already covered
-        s_segStartDist_m = distanceGetTotal_m() - s_pauseSegDist_m;
+        // (current chunk progress before pause is preserved via rebase)
+        s_segStartDist_m  = distanceGetTotal_m() - s_pauseSegDist_m;
+        s_chunkBanked_m   = s_pauseChunkBanked_m;
+        s_chunkCount      = s_pauseChunkCount;
     }
     if (seg.type == SEG_ROTATE_R || seg.type == SEG_ROTATE_L) {
         // Restore accumulated angle and reset heading tracker to current
