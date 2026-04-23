@@ -105,7 +105,7 @@ static const float DECEL_APPROACH_FWD_M  = 0.15f;
 static const float DECEL_APPROACH_BACK_M = 0.24f;
 
 // Linear chunk size (metres)
-static const float LINEAR_CHUNK_M = 1.0f;
+static const float LINEAR_CHUNK_M = 0.5f;
 
 // ── helpers ──────────────────────────────────
 
